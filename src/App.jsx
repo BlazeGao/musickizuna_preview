@@ -1,0 +1,163 @@
+import { useState, useCallback, useEffect, useRef } from 'react'
+import Sidebar from './components/Sidebar'
+import MusicPlayer from './components/MusicPlayer'
+import LyricsDisplay from './components/LyricsDisplay'
+import { parseLRC, findCurrentLyricIndex } from './utils/lrcParser'
+import { getHistory, addHistoryEntry, removeHistoryEntry, updateEntryLyrics, reorderHistory } from './utils/historyManager'
+import { cacheAudio, getCachedAudio } from './utils/audioCache'
+
+export default function App() {
+  const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [musicFile, setMusicFile] = useState(null)
+  const [musicName, setMusicName] = useState('')
+  const [lyrics, setLyrics] = useState([])
+  const [lyricsName, setLyricsName] = useState('')
+  const [currentIndex, setCurrentIndex] = useState(-1)
+  const [history, setHistory] = useState(() => getHistory())
+  const [currentTime, setCurrentTime] = useState(0)
+  const [autoPlay, setAutoPlay] = useState(false)
+  const lyricsTextRef = useRef('')
+
+  const saveHistory = useCallback((mName, lName, lText) => {
+    const updated = addHistoryEntry(mName, '', lName, '', lText)
+    setHistory(updated)
+  }, [])
+
+  const handleMusicSelect = useCallback((file) => {
+    const url = URL.createObjectURL(file)
+    cacheAudio(file.name, file).catch(() => {})
+    setMusicFile(url)
+    setMusicName(file.name)
+    setLyrics([])
+    setLyricsName('')
+    lyricsTextRef.current = ''
+  }, [])
+
+  const handleLyricsSelect = useCallback(async (file) => {
+    try {
+      const text = await file.text()
+      const parsed = parseLRC(text)
+      lyricsTextRef.current = text
+      setLyrics(parsed)
+      setLyricsName(file.name)
+    } catch (err) {
+      console.error('Failed to load lyrics:', err)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (musicName) {
+      saveHistory(musicName, lyricsName || '', lyricsTextRef.current || '')
+    }
+  }, [musicName, lyricsName, saveHistory])
+
+  const handleSelectEntry = useCallback((entry) => {
+    setMusicName(entry.musicName)
+    setLyricsName(entry.lyricsName)
+    setCurrentIndex(-1)
+
+    if (entry.lyricsText) {
+      lyricsTextRef.current = entry.lyricsText
+      const parsed = parseLRC(entry.lyricsText)
+      setLyrics(parsed)
+    } else {
+      setLyrics([])
+    }
+  }, [])
+
+  const handleDoubleClickEntry = useCallback(async (entry) => {
+    setMusicName(entry.musicName)
+    setLyricsName(entry.lyricsName)
+    setCurrentIndex(-1)
+
+    if (entry.lyricsText) {
+      lyricsTextRef.current = entry.lyricsText
+      const parsed = parseLRC(entry.lyricsText)
+      setLyrics(parsed)
+    } else {
+      lyricsTextRef.current = ''
+      setLyrics([])
+    }
+
+    try {
+      const blob = await getCachedAudio(entry.musicName)
+      if (blob) {
+        const url = URL.createObjectURL(blob)
+        setMusicFile(url)
+        setAutoPlay(true)
+      }
+    } catch {}
+  }, [])
+
+  const handleRemoveEntry = useCallback((id) => {
+    const updated = removeHistoryEntry(id)
+    setHistory(updated)
+  }, [])
+
+  const handleAddLyricsToEntry = useCallback(async (entry, file) => {
+    try {
+      const text = await file.text()
+      const parsed = parseLRC(text)
+      const updated = updateEntryLyrics(entry.id, file.name, text)
+      setHistory(updated)
+
+      if (entry.musicName === musicName) {
+        lyricsTextRef.current = text
+        setLyrics(parsed)
+        setLyricsName(file.name)
+      }
+    } catch (err) {
+      console.error('Failed to add lyrics:', err)
+    }
+  }, [musicName])
+
+  const handleTimeUpdate = useCallback((time) => {
+    setCurrentTime(time)
+    if (lyrics.length > 0) {
+      const idx = findCurrentLyricIndex(lyrics, time)
+      setCurrentIndex(idx)
+    }
+  }, [lyrics])
+
+  const handleReorder = useCallback((fromIndex, toIndex) => {
+    const updated = reorderHistory(fromIndex, toIndex)
+    setHistory(updated)
+  }, [])
+
+  return (
+    <div className="app">
+      <Sidebar
+        isOpen={sidebarOpen}
+        onToggle={() => setSidebarOpen(!sidebarOpen)}
+        history={history}
+        currentMusicName={musicName}
+        onSelectEntry={handleSelectEntry}
+        onDoubleClickEntry={handleDoubleClickEntry}
+        onRemoveEntry={handleRemoveEntry}
+        onMusicSelect={handleMusicSelect}
+        onAddLyricsToEntry={handleAddLyricsToEntry}
+        onReorder={handleReorder}
+      />
+
+      <main className={`main-content ${sidebarOpen ? 'sidebar-open' : ''}`}>
+        <div className="song-info">
+          {musicName ? (
+            <>
+              <h1 className="song-title">{musicName.replace(/\.[^/.]+$/, '')}</h1>
+              <p className="song-lyrics-label">{lyricsName ? `歌词: ${lyricsName}` : '未选择歌词'}</p>
+            </>
+          ) : (
+            <>
+              <h1 className="song-title empty">MusicKizuna</h1>
+              <p className="song-lyrics-label">选择音乐和歌词开始播放</p>
+            </>
+          )}
+        </div>
+
+        <LyricsDisplay lyrics={lyrics} currentIndex={currentIndex} />
+
+        <MusicPlayer musicFile={musicFile} onTimeUpdate={handleTimeUpdate} autoPlay={autoPlay} onAutoPlayHandled={() => setAutoPlay(false)} />
+      </main>
+    </div>
+  )
+}
