@@ -43,7 +43,9 @@ export default function App() {
   }, [])
 
   const handleMusicSelect = useCallback((file) => {
+    if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current)
     const url = URL.createObjectURL(file)
+    audioUrlRef.current = url
     cacheAudio(file.name, file).catch(() => {})
     setMusicFile(url)
     setMusicName(file.name)
@@ -70,21 +72,9 @@ export default function App() {
     }
   }, [musicName, lyricsName, saveHistory])
 
-  const handleSelectEntry = useCallback((entry) => {
-    setMusicName(entry.musicName)
-    setLyricsName(entry.lyricsName)
-    setCurrentIndex(-1)
+  const audioUrlRef = useRef(null)
 
-    if (entry.lyricsText) {
-      lyricsTextRef.current = entry.lyricsText
-      const parsed = parseLRC(entry.lyricsText)
-      setLyrics(parsed)
-    } else {
-      setLyrics([])
-    }
-  }, [])
-
-  const handleDoubleClickEntry = useCallback(async (entry) => {
+  const loadEntry = useCallback(async (entry, shouldAutoPlay = false) => {
     setMusicName(entry.musicName)
     setLyricsName(entry.lyricsName)
     setCurrentIndex(-1)
@@ -101,12 +91,22 @@ export default function App() {
     try {
       const blob = await getCachedAudio(entry.musicName)
       if (blob) {
+        if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current)
         const url = URL.createObjectURL(blob)
+        audioUrlRef.current = url
         setMusicFile(url)
-        setAutoPlay(true)
+        if (shouldAutoPlay) setAutoPlay(true)
       }
     } catch {}
   }, [])
+
+  const handleSelectEntry = useCallback((entry) => {
+    loadEntry(entry, false)
+  }, [loadEntry])
+
+  const handleDoubleClickEntry = useCallback((entry) => {
+    loadEntry(entry, true)
+  }, [loadEntry])
 
   const handleRemoveEntry = useCallback((id) => {
     const updated = removeHistoryEntry(id)
