@@ -1,12 +1,34 @@
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useCallback, forwardRef, useImperativeHandle } from 'react'
 import './MusicPlayer.css'
 
-export default function MusicPlayer({ musicFile, onTimeUpdate, autoPlay, onAutoPlayHandled }) {
+const MusicPlayer = forwardRef(function MusicPlayer({ musicFile, onTimeUpdate, autoPlay, onAutoPlayHandled, onPlayingChange, onSeek }, ref) {
   const audioRef = useRef(null)
   const [isPlaying, setIsPlaying] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(0)
   const [volume, setVolume] = useState(1)
+
+  const syncPlaying = useCallback((val) => {
+    setIsPlaying(val)
+    onPlayingChange?.(val)
+  }, [onPlayingChange])
+
+  useImperativeHandle(ref, () => ({
+    togglePlay() {
+      const audio = audioRef.current
+      if (!audio) return
+      if (audio.paused) audio.play(); else audio.pause()
+      syncPlaying(!audio.paused)
+    },
+    seekTo(time) {
+      const audio = audioRef.current
+      if (!audio) return
+      audio.currentTime = time
+      setCurrentTime(time)
+    },
+    get isPlaying() { return !audioRef.current?.paused },
+    get currentTime() { return audioRef.current?.currentTime ?? 0 },
+  }))
 
   useEffect(() => {
     const audio = audioRef.current
@@ -16,21 +38,23 @@ export default function MusicPlayer({ musicFile, onTimeUpdate, autoPlay, onAutoP
       setCurrentTime(audio.currentTime)
       onTimeUpdate?.(audio.currentTime)
     }
-    const handleLoadedMetadata = () => {
-      setDuration(audio.duration)
-    }
-    const handleEnded = () => {
-      setIsPlaying(false)
-    }
+    const handleLoadedMetadata = () => setDuration(audio.duration)
+    const handleEnded = () => syncPlaying(false)
+    const handlePlay = () => syncPlaying(true)
+    const handlePause = () => syncPlaying(false)
 
     audio.addEventListener('timeupdate', handleTimeUpdate)
     audio.addEventListener('loadedmetadata', handleLoadedMetadata)
     audio.addEventListener('ended', handleEnded)
+    audio.addEventListener('play', handlePlay)
+    audio.addEventListener('pause', handlePause)
 
     return () => {
       audio.removeEventListener('timeupdate', handleTimeUpdate)
       audio.removeEventListener('loadedmetadata', handleLoadedMetadata)
       audio.removeEventListener('ended', handleEnded)
+      audio.removeEventListener('play', handlePlay)
+      audio.removeEventListener('pause', handlePause)
     }
   }, [musicFile, onTimeUpdate])
 
@@ -38,7 +62,7 @@ export default function MusicPlayer({ musicFile, onTimeUpdate, autoPlay, onAutoP
     const audio = audioRef.current
     if (audio && musicFile) {
       audio.load()
-      setIsPlaying(false)
+      syncPlaying(false)
       setCurrentTime(0)
     }
   }, [musicFile])
@@ -50,7 +74,7 @@ export default function MusicPlayer({ musicFile, onTimeUpdate, autoPlay, onAutoP
         const onCanPlay = () => {
           audio.removeEventListener('canplay', onCanPlay)
           audio.play().then(() => {
-            setIsPlaying(true)
+            syncPlaying(true)
             onAutoPlayHandled?.()
           }).catch(() => {
             onAutoPlayHandled?.()
@@ -67,13 +91,8 @@ export default function MusicPlayer({ musicFile, onTimeUpdate, autoPlay, onAutoP
   const togglePlay = useCallback(() => {
     const audio = audioRef.current
     if (!audio) return
-    if (isPlaying) {
-      audio.pause()
-    } else {
-      audio.play()
-    }
-    setIsPlaying(!isPlaying)
-  }, [isPlaying])
+    if (audio.paused) audio.play(); else audio.pause()
+  }, [])
 
   const handleSeek = (e) => {
     const audio = audioRef.current
@@ -81,6 +100,7 @@ export default function MusicPlayer({ musicFile, onTimeUpdate, autoPlay, onAutoP
     const time = parseFloat(e.target.value)
     audio.currentTime = time
     setCurrentTime(time)
+    onSeek?.(time)
   }
 
   const handleVolume = (e) => {
@@ -135,4 +155,6 @@ export default function MusicPlayer({ musicFile, onTimeUpdate, autoPlay, onAutoP
       </div>
     </div>
   )
-}
+})
+
+export default MusicPlayer
