@@ -19,23 +19,13 @@
   box-shadow: 0 0 12px rgba(102, 126, 234, 0.15);
 }
 
-.now-playing-item.drag-over {
-  border-color: #667eea;
-  border-style: dashed;
-  background: rgba(102, 126, 234, 0.06);
-}
-
-.now-playing-item.dragging {
-  opacity: 0.4;
-}
-
 .now-playing-card {
   flex: 1;
   padding: 10px 12px;
   cursor: pointer;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
   min-width: 0;
 }
 
@@ -77,12 +67,56 @@
   color: #fff;
 }
 
-.now-playing-lyrics {
+.now-playing-lyrics-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.now-playing-lyrics-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.lyrics-lang-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: rgba(102, 126, 234, 0.8);
+  background: rgba(102, 126, 234, 0.12);
+  padding: 1px 5px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.lyrics-file-name {
   font-size: 12px;
   color: rgba(255, 255, 255, 0.35);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.lyrics-remove-btn {
+  width: 18px;
+  height: 18px;
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.25);
+  font-size: 14px;
+  cursor: pointer;
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.15s;
+  line-height: 1;
+}
+
+.lyrics-remove-btn:hover {
+  color: #ff6b6b;
+  background: rgba(255, 107, 107, 0.1);
 }
 
 .now-playing-add-btn {
@@ -92,7 +126,7 @@
   border-radius: 4px;
   background: transparent;
   color: rgba(255, 255, 255, 0.45);
-  font-size: 12px;
+  font-size: 11px;
   cursor: pointer;
   transition: all 0.2s;
   margin-top: 2px;
@@ -102,6 +136,11 @@
   border-color: #667eea;
   color: #667eea;
   background: rgba(102, 126, 234, 0.08);
+}
+
+.now-playing-no-lang {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.25);
 }
 
 .now-playing-remove {

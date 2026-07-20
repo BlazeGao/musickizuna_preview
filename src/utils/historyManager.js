@@ -1,26 +1,112 @@
-const STORAGE_KEY = 'musickizuna_history'
+export const LANG_LABELS = { zh: '中文', en: 'English', ja: '日本語', ko: '한국어' }
 
-/**
- * Get all history entries from localStorage
- */
-export function getHistory() {
+export const SUPPORTED_LANGS = ['zh', 'en']
+
+function getStorageKey(lang) {
+  return `musickizuna_history_${lang}`
+}
+
+const OLD_STORAGE_KEY = 'musickizuna_history'
+
+function migrateOldHistory() {
+  const old = localStorage.getItem(OLD_STORAGE_KEY)
+  if (!old) return
   try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    return raw ? JSON.parse(raw) : []
+    const entries = JSON.parse(old)
+    const byLang = { zh: [], en: [] }
+    for (const raw of entries) {
+      const migrated = migrateOldEntry(raw)
+      const langs = Object.keys(migrated.lyrics || {})
+      if (langs.length > 0) {
+        for (const lang of langs) {
+          if (byLang[lang]) byLang[lang].push(migrated)
+        }
+      } else {
+        byLang.zh.push(migrated)
+      }
+    }
+    for (const [lang, list] of Object.entries(byLang)) {
+      if (list.length > 0) {
+        localStorage.setItem(getStorageKey(lang), JSON.stringify(list))
+      }
+    }
+    localStorage.removeItem(OLD_STORAGE_KEY)
+  } catch {}
+}
+
+function migrateOldEntry(entry) {
+  if (entry.lyrics && typeof entry.lyrics === 'object' && Object.keys(entry.lyrics).length > 0) {
+    const migrated = {}
+    for (const [lang, val] of Object.entries(entry.lyrics)) {
+      migrated[lang] = { name: val.name || '', text: val.text || '' }
+    }
+    return {
+      id: entry.id || Date.now(),
+      musicName: entry.musicName || '',
+      musicPath: entry.musicPath || '',
+      lyrics: migrated,
+      lastPlayed: entry.lastPlayed || new Date().toISOString(),
+    }
+  }
+  const lyrics = {}
+  if (entry.lyricsText || entry.lyricsName) {
+    lyrics.zh = { name: entry.lyricsName || '', text: entry.lyricsText || '' }
+  }
+  return {
+    id: entry.id || Date.now(),
+    musicName: entry.musicName || '',
+    musicPath: entry.musicPath || '',
+    lyrics,
+    lastPlayed: entry.lastPlayed || new Date().toISOString(),
+  }
+}
+
+function migrateFlatEntries() {
+  for (const lang of SUPPORTED_LANGS) {
+    const raw = localStorage.getItem(getStorageKey(lang))
+    if (!raw) continue
+    try {
+      const entries = JSON.parse(raw)
+      let changed = false
+      for (const entry of entries) {
+        if (entry.lyricsName !== undefined && !entry.lyrics) {
+          entry.lyrics = { [lang]: { name: entry.lyricsName || '', text: entry.lyricsText || '' } }
+          delete entry.lyricsName
+          delete entry.lyricsText
+          changed = true
+        }
+      }
+      if (changed) {
+        localStorage.setItem(getStorageKey(lang), JSON.stringify(entries))
+      }
+    } catch {}
+  }
+}
+
+let migrated = false
+
+function ensureMigration() {
+  if (!migrated) {
+    migrateOldHistory()
+    migrateFlatEntries()
+    migrated = true
+  }
+}
+
+export function getHistory(lang) {
+  ensureMigration()
+  try {
+    const raw = localStorage.getItem(getStorageKey(lang))
+    if (!raw) return []
+    return JSON.parse(raw)
   } catch {
     return []
   }
 }
 
-/**
- * Add a new entry to history (dedup by musicName+lyricsName)
- * Moves to top if already exists
- */
-export function addHistoryEntry(musicName, musicPath, lyricsName, lyricsPath, lyricsText) {
-  const history = getHistory()
-  const existing = history.find(
-    (e) => e.musicName === musicName && e.lyricsName === lyricsName
-  )
+export function addHistoryEntry(lang, musicName, musicPath, lyricsMap) {
+  const history = getHistory(lang)
+  const existing = history.find((e) => e.musicName === musicName)
   if (existing) {
     history.splice(history.indexOf(existing), 1)
   }
@@ -28,47 +114,45 @@ export function addHistoryEntry(musicName, musicPath, lyricsName, lyricsPath, ly
     id: Date.now(),
     musicName,
     musicPath,
-    lyricsName,
-    lyricsPath,
-    lyricsText: lyricsText || '',
+    lyrics: lyricsMap || {},
     lastPlayed: new Date().toISOString(),
   })
-  // Keep max 50 entries
   if (history.length > 50) history.length = 50
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(history))
+  localStorage.setItem(getStorageKey(lang), JSON.stringify(history))
   return history
 }
 
-/**
- * Remove a history entry by id
- */
-export function removeHistoryEntry(id) {
-  const history = getHistory().filter((e) => e.id !== id)
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(history))
+export function removeHistoryEntry(lang, id) {
+  const history = getHistory(lang).filter((e) => e.id !== id)
+  localStorage.setItem(getStorageKey(lang), JSON.stringify(history))
   return history
 }
 
-/**
- * Update lyrics info for a specific history entry
- */
-export function updateEntryLyrics(id, lyricsName, lyricsText) {
-  const history = getHistory()
+export function updateEntryLyrics(lang, id, lyricsLang, lyricsName, lyricsText) {
+  const history = getHistory(lang)
   const entry = history.find((e) => e.id === id)
   if (entry) {
-    entry.lyricsName = lyricsName
-    entry.lyricsText = lyricsText
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(history))
+    if (!entry.lyrics) entry.lyrics = {}
+    entry.lyrics[lyricsLang] = { name: lyricsName, text: lyricsText }
+    localStorage.setItem(getStorageKey(lang), JSON.stringify(history))
   }
   return history
 }
 
-/**
- * Reorder history by moving entry from one index to another
- */
-export function reorderHistory(fromIndex, toIndex) {
-  const history = getHistory()
+export function removeEntryLyrics(lang, id, lyricsLang) {
+  const history = getHistory(lang)
+  const entry = history.find((e) => e.id === id)
+  if (entry && entry.lyrics) {
+    delete entry.lyrics[lyricsLang]
+    localStorage.setItem(getStorageKey(lang), JSON.stringify(history))
+  }
+  return history
+}
+
+export function reorderHistory(lang, fromIndex, toIndex) {
+  const history = getHistory(lang)
   const [item] = history.splice(fromIndex, 1)
   history.splice(toIndex, 0, item)
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(history))
+  localStorage.setItem(getStorageKey(lang), JSON.stringify(history))
   return history
 }

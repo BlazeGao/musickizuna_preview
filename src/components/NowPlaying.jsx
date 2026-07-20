@@ -1,23 +1,31 @@
 import { useRef } from 'react'
+import { LANG_LABELS, SUPPORTED_LANGS } from '../utils/historyManager'
 import './NowPlaying.css'
 
 export default function NowPlaying({
   entry,
   isPlaying,
+  activeLang,
   onSelect,
   onDoubleClick,
   onRemove,
   onAddLyrics,
+  onRemoveLyrics,
   onDragStart,
   onDragOver,
   onDrop,
 }) {
-  const lyricsInputRef = useRef(null)
+  const inputRefs = useRef({})
 
-  const handleLyricsChange = (e) => {
+  const availableLangs = activeLang === 'en' ? SUPPORTED_LANGS : [activeLang]
+  const lyrics = entry.lyrics || {}
+  const boundLangs = availableLangs.filter((l) => lyrics[l]?.name)
+  const unboundLangs = availableLangs.filter((l) => !lyrics[l]?.name)
+
+  const handleLyricsChange = (lang, e) => {
     const file = e.target.files[0]
     if (file) {
-      onAddLyrics(entry, file)
+      onAddLyrics(entry, lang, file)
     }
     e.target.value = ''
   }
@@ -40,27 +48,52 @@ export default function NowPlaying({
           <span className="now-playing-music">{entry.musicName}</span>
         </div>
 
-        {entry.lyricsName ? (
-          <span className="now-playing-lyrics">{entry.lyricsName}</span>
-        ) : (
-          <button
-            className="now-playing-add-btn"
-            onClick={(e) => {
-              e.stopPropagation()
-              lyricsInputRef.current?.click()
-            }}
-          >
-            + 添加歌词
-          </button>
-        )}
+        <div className="now-playing-lyrics-list">
+          {boundLangs.map((lang) => (
+            <div key={lang} className="now-playing-lyrics-row">
+              <span className="lyrics-lang-label">{LANG_LABELS[lang] || lang}</span>
+              <span className="lyrics-file-name">{lyrics[lang].name}</span>
+              <button
+                className="lyrics-remove-btn"
+                title="移除歌词"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onRemoveLyrics(entry.id, lang)
+                }}
+              >
+                ×
+              </button>
+            </div>
+          ))}
 
-        <input
-          ref={lyricsInputRef}
-          type="file"
-          accept=".txt,.lrc"
-          onChange={handleLyricsChange}
-          style={{ display: 'none' }}
-        />
+          {unboundLangs.map((lang) => (
+            <button
+              key={lang}
+              className="now-playing-add-btn"
+              onClick={(e) => {
+                e.stopPropagation()
+                inputRefs.current[lang]?.click()
+              }}
+            >
+              + 添加{LANG_LABELS[lang] || lang}歌词
+            </button>
+          ))}
+
+          {boundLangs.length === 0 && unboundLangs.length === 0 && (
+            <span className="now-playing-no-lang">无可用语种</span>
+          )}
+        </div>
+
+        {availableLangs.map((lang) => (
+          <input
+            key={lang}
+            ref={(el) => { inputRefs.current[lang] = el }}
+            type="file"
+            accept=".txt,.lrc"
+            onChange={(e) => handleLyricsChange(lang, e)}
+            style={{ display: 'none' }}
+          />
+        ))}
       </div>
 
       <button

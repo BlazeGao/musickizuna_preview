@@ -1,5 +1,5 @@
 import { useRef, useState, useCallback } from 'react'
-import { reorderHistory } from '../utils/historyManager'
+import { LANG_LABELS, SUPPORTED_LANGS } from '../utils/historyManager'
 import NowPlaying from './NowPlaying'
 import './Sidebar.css'
 
@@ -8,11 +8,14 @@ export default function Sidebar({
   onToggle,
   history,
   currentMusicName,
+  activeLang,
+  onSwitchLang,
   onSelectEntry,
   onDoubleClickEntry,
   onRemoveEntry,
   onMusicSelect,
   onAddLyricsToEntry,
+  onRemoveLyricsFromEntry,
   onReorder,
 }) {
   const musicInputRef = useRef(null)
@@ -57,6 +60,17 @@ export default function Sidebar({
       <div className={`sidebar ${isOpen ? 'open' : ''}`}>
         <div className="sidebar-header">
           <h2 className="sidebar-title">MusicKizuna</h2>
+          <div className="lang-switcher">
+            {SUPPORTED_LANGS.map((lang) => (
+              <button
+                key={lang}
+                className={`lang-btn ${activeLang === lang ? 'active' : ''}`}
+                onClick={() => onSwitchLang(lang)}
+              >
+                {LANG_LABELS[lang] || lang}
+              </button>
+            ))}
+          </div>
         </div>
 
         <div className="sidebar-history">
@@ -70,10 +84,12 @@ export default function Sidebar({
                   key={entry.id}
                   entry={entry}
                   isPlaying={entry.musicName === currentMusicName}
+                  activeLang={activeLang}
                   onSelect={onSelectEntry}
                   onDoubleClick={onDoubleClickEntry}
                   onRemove={onRemoveEntry}
                   onAddLyrics={onAddLyricsToEntry}
+                  onRemoveLyrics={onRemoveLyricsFromEntry}
                   onDragStart={(e) => handleDragStart(e, index)}
                   onDragOver={(e) => handleDragOver(e, index)}
                   onDrop={(e) => handleDrop(e, index)}

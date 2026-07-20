@@ -38,7 +38,13 @@ const PauseIcon = () => (
   </svg>
 )
 
-const ICONS = { '▲': ChevronUp, '▼': ChevronDown, '⏸': PauseIcon, '▶': PlayIcon, '🔂': RepeatOneIcon }
+const ICONS = {
+  '▲': ChevronUp,
+  '▼': ChevronDown,
+  '⏸': PauseIcon,
+  '▶': PlayIcon,
+  '🔂': RepeatOneIcon,
+}
 
 export default function FloatingActionMenu({ items = [] }) {
   const [open, setOpen] = useState(false)

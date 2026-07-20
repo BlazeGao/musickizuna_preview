@@ -52,6 +52,57 @@
   color: rgba(255, 255, 255, 0.5);
 }
 
+.lyric-line-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 20px;
+  border-radius: 8px;
+  width: 100%;
+  transition: all 0.4s ease;
+}
+
+.lyric-line-group.active {
+  background: rgba(102, 126, 234, 0.15);
+  transform: scale(1.02);
+}
+
+.lyric-sub-line {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  justify-content: center;
+  line-height: 1.6;
+}
+
+.lyric-line-group:not(.active) .lyric-text {
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.lyric-line-group.active .lyric-text {
+  color: #fff;
+}
+
+.lyric-line-group.active .lyric-lang-en .lyric-text {
+  font-size: 24px;
+  color: #fff;
+}
+
+.lyric-line-group.active .lyric-lang-zh .lyric-text {
+  font-size: 18px;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.lyric-line-group:not(.active) .lyric-lang-en .lyric-text {
+  font-size: 18px;
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.lyric-line-group:not(.active) .lyric-lang-zh .lyric-text {
+  font-size: 15px;
+  color: rgba(255, 255, 255, 0.25);
+}
+
 .lyrics-empty {
   display: flex;
   align-items: center;
