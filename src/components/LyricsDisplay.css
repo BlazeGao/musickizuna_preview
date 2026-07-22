@@ -40,6 +40,37 @@
   width: 100%;
 }
 
+.lyric-line-inner {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.lyric-seek-btn {
+  position: absolute;
+  left: -32px;
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 14px;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  opacity: 0;
+  transition: opacity 0.2s, color 0.2s;
+  line-height: 1;
+}
+
+.lyric-line:hover .lyric-seek-btn,
+.lyric-line-group:hover .lyric-seek-btn {
+  opacity: 1;
+}
+
+.lyric-seek-btn:hover {
+  color: #667eea;
+}
+
 .lyric-line.active {
   font-size: 24px;
   color: #fff;
@@ -60,6 +91,12 @@
   border-radius: 8px;
   width: 100%;
   transition: all 0.4s ease;
+}
+
+.lyric-group-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .lyric-line-group.active {
@@ -110,4 +147,29 @@
   height: 100%;
   color: rgba(255, 255, 255, 0.3);
   font-size: 16px;
+}
+
+.lyric-word {
+  cursor: default;
+  border-radius: 2px;
+  transition: background 0.15s;
+}
+
+.lyric-line.active .lyric-word:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+ruby {
+  ruby-align: center;
+}
+
+ruby rt {
+  font-size: 0.55em;
+  color: rgba(255, 255, 255, 0.55);
+  font-weight: 400;
+}
+
+.lyric-line-group.active ruby rt {
+  color: rgba(255, 255, 255, 0.7);
 }

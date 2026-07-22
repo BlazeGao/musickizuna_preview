@@ -1,8 +1,28 @@
-import { useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
+import { fetchPhonetic } from '../utils/phoneticDict'
 import './LyricsDisplay.css'
 
-export default function LyricsDisplay({ lyricsMap, displayConfig, displayOrder, currentIndex }) {
+function tokenize(text) {
+  const tokens = []
+  const re = /([A-Za-z']+)/g
+  let lastIndex = 0
+  let m
+  while ((m = re.exec(text)) !== null) {
+    if (m.index > lastIndex) {
+      tokens.push({ type: 'sep', value: text.slice(lastIndex, m.index) })
+    }
+    tokens.push({ type: 'word', value: m[1] })
+    lastIndex = re.lastIndex
+  }
+  if (lastIndex < text.length) {
+    tokens.push({ type: 'sep', value: text.slice(lastIndex) })
+  }
+  return tokens
+}
+
+export default function LyricsDisplay({ lyricsMap, displayConfig, displayOrder, currentIndex, onSeek }) {
   const containerRef = useRef(null)
+  const [selectedWords, setSelectedWords] = useState(new Map())
 
   useEffect(() => {
     const container = containerRef.current
@@ -20,6 +40,54 @@ export default function LyricsDisplay({ lyricsMap, displayConfig, displayOrder, 
       })
     }
   }, [currentIndex])
+
+  useEffect(() => {
+    setSelectedWords(new Map())
+  }, [lyricsMap])
+
+  const handleWordDoubleClick = useCallback((word) => {
+    const key = word.toLowerCase()
+    setSelectedWords(prev => {
+      const next = new Map(prev)
+      if (next.has(key)) {
+        next.delete(key)
+      } else {
+        next.set(key, null)
+        fetchPhonetic(key).then(ipa => {
+          if (ipa) {
+            setSelectedWords(p => {
+              const n = new Map(p)
+              n.set(key, ipa)
+              return n
+            })
+          }
+        })
+      }
+      return next
+    })
+  }, [])
+
+  const renderLineText = (text) => {
+    const tokens = tokenize(text)
+    return tokens.map((token, i) => {
+      if (token.type === 'sep') return <span key={i}>{token.value}</span>
+      const key = token.value.toLowerCase()
+      const phonetic = selectedWords.get(key)
+      const onDblClick = () => handleWordDoubleClick(token.value)
+      if (phonetic) {
+        return (
+          <ruby key={i} className="lyric-word annotated" onDoubleClick={onDblClick}>
+            {token.value}<rt>{phonetic}</rt>
+          </ruby>
+        )
+      }
+      return (
+        <span key={i} className="lyric-word" onDoubleClick={onDblClick}>
+          {token.value}
+        </span>
+      )
+    })
+  }
 
   const hasAnyLyrics = Object.keys(lyricsMap).some((lang) => lyricsMap[lang]?.length > 0)
 
@@ -50,7 +118,12 @@ export default function LyricsDisplay({ lyricsMap, displayConfig, displayOrder, 
                 key={index}
                 className={`lyric-line ${index === currentIndex ? 'active' : ''}`}
               >
-                {line.text}
+                <span className="lyric-line-inner">
+                  {onSeek && index !== currentIndex && (
+                    <button className="lyric-seek-btn" onClick={() => onSeek(index)} title="跳转到此句">▶</button>
+                  )}
+                  <span className="lyric-text">{renderLineText(line.text)}</span>
+                </span>
               </div>
             ))}
           </div>
@@ -66,12 +139,19 @@ export default function LyricsDisplay({ lyricsMap, displayConfig, displayOrder, 
               key={index}
               className={`lyric-line-group ${index === currentIndex ? 'active' : ''}`}
             >
-              <div className="lyric-sub-line">
-                <span className="lyric-text">{line.text}</span>
-              </div>
-              <div className="lyric-sub-line">
-                <span className="lyric-text">{secondaryLyrics[index]?.text || ''}</span>
-              </div>
+              <span className="lyric-line-inner">
+                {onSeek && index !== currentIndex && (
+                  <button className="lyric-seek-btn" onClick={() => onSeek(index)} title="跳转到此句">▶</button>
+                )}
+                <span className="lyric-group-lines">
+                  <div className="lyric-sub-line">
+                    <span className="lyric-text">{renderLineText(line.text)}</span>
+                  </div>
+                  <div className="lyric-sub-line">
+                    <span className="lyric-text">{secondaryLyrics[index]?.text || ''}</span>
+                  </div>
+                </span>
+              </span>
             </div>
           ))}
         </div>
@@ -90,7 +170,12 @@ export default function LyricsDisplay({ lyricsMap, displayConfig, displayOrder, 
             key={index}
             className={`lyric-line ${index === currentIndex ? 'active' : ''}`}
           >
-            {line.text}
+            <span className="lyric-line-inner">
+              {onSeek && index !== currentIndex && (
+                <button className="lyric-seek-btn" onClick={() => onSeek(index)} title="跳转到此句">▶</button>
+              )}
+              <span className="lyric-text">{renderLineText(line.text)}</span>
+            </span>
           </div>
         ))}
       </div>

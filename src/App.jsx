@@ -266,6 +266,12 @@ export default function App() {
     }
   }, [activeLyrics])
 
+  const handleSeekToLine = useCallback((index) => {
+    if (activeLyrics.length === 0 || index < 0 || index >= activeLyrics.length) return
+    if (singleRepeatRef.current) repeatTargetRef.current = index
+    playerRef.current?.seekTo(activeLyrics[index].time)
+  }, [activeLyrics])
+
   const handleReorder = useCallback((fromIndex, toIndex) => {
     const updated = reorderHistory(activeLang, fromIndex, toIndex)
     setHistory(updated)
@@ -320,6 +326,7 @@ export default function App() {
           displayConfig={displayConfig}
           displayOrder={displayOrder}
           currentIndex={currentIndex}
+          onSeek={handleSeekToLine}
         />
 
         <MusicPlayer
