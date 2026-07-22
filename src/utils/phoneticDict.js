@@ -1,3 +1,5 @@
+import ToJyutping from 'to-jyutping'
+
 const API_BASE = 'http://127.0.0.1:5001'
 
 const CACHE_KEY = 'phonetic_cache'
@@ -33,4 +35,11 @@ export async function fetchPhonetic(word) {
   } catch {
     return null
   }
+}
+
+export function generateJyutpingLyrics(zhLyrics) {
+  return zhLyrics.map(line => ({
+    time: line.time,
+    text: ToJyutping.getJyutpingText(line.text),
+  }))
 }

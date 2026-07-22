@@ -1,6 +1,6 @@
-export const LANG_LABELS = { zh: '中文', en: 'English', ja: '日本語', ko: '한국어' }
+export const LANG_LABELS = { zh: '普通话', en: 'English', yue: '粤语', ja: '日本語', ko: '한국어' }
 
-export const SUPPORTED_LANGS = ['zh', 'en']
+export const SUPPORTED_LANGS = ['zh', 'en', 'yue']
 
 function getStorageKey(lang) {
   return `musickizuna_history_${lang}`
@@ -13,7 +13,7 @@ function migrateOldHistory() {
   if (!old) return
   try {
     const entries = JSON.parse(old)
-    const byLang = { zh: [], en: [] }
+    const byLang = { zh: [], en: [], yue: [] }
     for (const raw of entries) {
       const migrated = migrateOldEntry(raw)
       const langs = Object.keys(migrated.lyrics || {})

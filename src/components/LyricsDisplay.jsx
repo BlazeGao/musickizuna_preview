@@ -100,6 +100,73 @@ export default function LyricsDisplay({ lyricsMap, displayConfig, displayOrder, 
   }
 
   const enabledLangs = displayOrder.filter(l => displayConfig[l])
+  const hasJyutping = enabledLangs.includes('yue')
+
+  if (hasJyutping) {
+    const zhLyrics = lyricsMap.zh || []
+    const jyutpingLyrics = lyricsMap.yue || []
+    const enLyrics = enabledLangs.includes('en') ? (lyricsMap.en || []) : []
+    const hasZh = zhLyrics.length > 0
+    const hasJp = jyutpingLyrics.length > 0
+
+    if (!hasZh && !hasJp) {
+      const fallback = enLyrics.length > 0 ? enLyrics : zhLyrics
+      if (fallback.length === 0) {
+        return (
+          <div className="lyrics-display" ref={containerRef}>
+            <div className="lyrics-empty">请在侧边栏选择歌词文件</div>
+          </div>
+        )
+      }
+      return (
+        <div className="lyrics-display" ref={containerRef}>
+          <div className="lyrics-content">
+            {fallback.map((line, index) => (
+              <div key={index} className={`lyric-line ${index === currentIndex ? 'active' : ''}`}>
+                <span className="lyric-line-inner">
+                  {onSeek && index !== currentIndex && (
+                    <button className="lyric-seek-btn" onClick={() => onSeek(index)} title="跳转到此句">▶</button>
+                  )}
+                  <span className="lyric-text">{renderLineText(line.text)}</span>
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )
+    }
+
+    return (
+      <div className="lyrics-display" ref={containerRef}>
+        <div className="lyrics-content">
+          {zhLyrics.map((line, index) => (
+            <div key={index} className={`lyric-line-group ${index === currentIndex ? 'active' : ''}`}>
+              <span className="lyric-line-inner">
+                {onSeek && index !== currentIndex && (
+                  <button className="lyric-seek-btn" onClick={() => onSeek(index)} title="跳转到此句">▶</button>
+                )}
+                <span className="lyric-group-lines">
+                  <div className="lyric-sub-line">
+                    <span className="lyric-text">{renderLineText(line.text)}</span>
+                  </div>
+                  {hasJp && (
+                    <div className="lyric-sub-line jyutping-line">
+                      <span className="lyric-text">{jyutpingLyrics[index]?.text || ''}</span>
+                    </div>
+                  )}
+                  {enLyrics.length > 0 && (
+                    <div className="lyric-sub-line">
+                      <span className="lyric-text">{enLyrics[index]?.text || ''}</span>
+                    </div>
+                  )}
+                </span>
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+    )
+  }
 
   if (enabledLangs.length > 1) {
     const primaryLang = enabledLangs[0]

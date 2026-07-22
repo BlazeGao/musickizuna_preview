@@ -6,6 +6,7 @@ import FloatingActionMenu from './components/FloatingActionMenu'
 import { parseLRC, findCurrentLyricIndex } from './utils/lrcParser'
 import { getHistory, addHistoryEntry, removeHistoryEntry, updateEntryLyrics, removeEntryLyrics, reorderHistory, SUPPORTED_LANGS, LANG_LABELS } from './utils/historyManager'
 import { cacheAudio, getCachedAudio } from './utils/audioCache'
+import { generateJyutpingLyrics } from './utils/phoneticDict'
 
 function getDefaultDisplayConfig(lang) {
   const cfg = {}
@@ -44,6 +45,7 @@ export default function App() {
   const workspacesRef = useRef({
     zh: { musicFile: null, musicName: '', lyricsMap: {}, currentIndex: -1, displayConfig: getDefaultDisplayConfig('zh'), displayOrder: getDefaultDisplayOrder('zh') },
     en: { musicFile: null, musicName: '', lyricsMap: {}, currentIndex: -1, displayConfig: getDefaultDisplayConfig('en'), displayOrder: getDefaultDisplayOrder('en') },
+    yue: { musicFile: null, musicName: '', lyricsMap: {}, currentIndex: -1, displayConfig: getDefaultDisplayConfig('yue'), displayOrder: getDefaultDisplayOrder('yue') },
   })
 
   const currentEntry = history.find((e) => e.musicName === musicName) || null
@@ -63,6 +65,10 @@ export default function App() {
 
     workspacesRef.current[activeLang] = {
       musicFile, musicName, lyricsMap, currentIndex, displayConfig, displayOrder,
+    }
+
+    if (newLang === 'yue' && !workspacesRef.current.yue.lyricsMap.zh && lyricsMap.zh?.length > 0) {
+      workspacesRef.current.yue.lyricsMap = { ...workspacesRef.current.yue.lyricsMap, zh: lyricsMap.zh }
     }
 
     const snap = workspacesRef.current[newLang]
@@ -113,10 +119,21 @@ export default function App() {
     repeatTargetRef.current = -1
   }, [lyricsMap])
 
+  useEffect(() => {
+    if (lyricsMap.zh?.length > 0) {
+      const jyutpingLyrics = generateJyutpingLyrics(lyricsMap.zh)
+      setLyricsMap(prev => {
+        if (JSON.stringify(prev.yue) === JSON.stringify(jyutpingLyrics)) return prev
+        return { ...prev, yue: jyutpingLyrics }
+      })
+    }
+  }, [lyricsMap.zh])
+
   const saveHistory = useCallback(() => {
     if (!musicName) return
     const lyrics = {}
     for (const [lang, parsed] of Object.entries(lyricsMap)) {
+      if (activeLang === 'yue' && lang === 'yue') continue
       const entry = currentEntry
       lyrics[lang] = {
         name: entry?.lyrics?.[lang]?.name || '',
@@ -141,11 +158,16 @@ export default function App() {
     try {
       const text = await file.text()
       const parsed = parseLRC(text)
-      setLyricsMap(prev => ({ ...prev, [lang]: parsed }))
+      if (activeLang === 'yue') {
+        const jyutpingLyrics = generateJyutpingLyrics(parsed)
+        setLyricsMap(prev => ({ ...prev, zh: parsed, yue: jyutpingLyrics }))
+      } else {
+        setLyricsMap(prev => ({ ...prev, [lang]: parsed }))
+      }
     } catch (err) {
       console.error('Failed to load lyrics:', err)
     }
-  }, [])
+  }, [activeLang])
 
   useEffect(() => {
     if (musicName && !history.find((e) => e.musicName === musicName)) {
@@ -163,6 +185,9 @@ export default function App() {
       if (lyrics[lang]?.text) {
         parsedMap[lang] = parseLRC(lyrics[lang].text)
       }
+    }
+    if (activeLang === 'yue' && parsedMap.zh) {
+      parsedMap.yue = generateJyutpingLyrics(parsedMap.zh)
     }
     setLyricsMap(parsedMap)
     setCurrentIndex(-1)
@@ -196,11 +221,17 @@ export default function App() {
     try {
       const text = await file.text()
       const parsed = parseLRC(text)
-      const updated = updateEntryLyrics(activeLang, entry.id, lang, file.name, text)
+      const storeLang = activeLang === 'yue' ? 'zh' : lang
+      const updated = updateEntryLyrics(activeLang, entry.id, storeLang, file.name, text)
       setHistory(updated)
 
       if (entry.musicName === musicName) {
-        setLyricsMap(prev => ({ ...prev, [lang]: parsed }))
+        if (activeLang === 'yue') {
+          const jyutpingLyrics = generateJyutpingLyrics(parsed)
+          setLyricsMap(prev => ({ ...prev, zh: parsed, yue: jyutpingLyrics }))
+        } else {
+          setLyricsMap(prev => ({ ...prev, [lang]: parsed }))
+        }
       }
     } catch (err) {
       console.error('Failed to add lyrics:', err)

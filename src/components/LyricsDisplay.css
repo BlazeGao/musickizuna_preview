@@ -173,3 +173,18 @@ ruby rt {
 .lyric-line-group.active ruby rt {
   color: rgba(255, 255, 255, 0.7);
 }
+
+.jyutping-line .lyric-text {
+  font-size: 14px;
+  letter-spacing: 0.5px;
+}
+
+.lyric-line-group.active .jyutping-line .lyric-text {
+  font-size: 16px;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.lyric-line-group:not(.active) .jyutping-line .lyric-text {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.25);
+}
