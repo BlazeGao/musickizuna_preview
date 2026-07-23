@@ -21,7 +21,7 @@ function tokenize(text) {
   return tokens
 }
 
-export default function LyricsDisplay({ lyricsMap, displayConfig, displayOrder, currentIndex, onSeek, activeLang, onPauseMusic, onResumeMusic }) {
+export default function LyricsDisplay({ lyricsMap, displayConfig, displayOrder, currentIndex, onSeek, activeLang, onPauseMusic, onResumeMusic, pinyinLyrics }) {
   const containerRef = useRef(null)
   const [selectedWords, setSelectedWords] = useState(new Map())
   const [hoveredIndex, setHoveredIndex] = useState(null)
@@ -144,8 +144,9 @@ export default function LyricsDisplay({ lyricsMap, displayConfig, displayOrder, 
     )
   }
 
-  const enabledLangs = displayOrder.filter(l => displayConfig[l])
+  const enabledLangs = displayOrder.filter(l => l === 'pinyin' || displayConfig[l])
   const hasJyutping = enabledLangs.includes('yue')
+  const hasPinyin = enabledLangs.includes('pinyin')
 
   if (hasJyutping) {
     const zhLyrics = lyricsMap.zh || []
@@ -217,6 +218,63 @@ export default function LyricsDisplay({ lyricsMap, displayConfig, displayOrder, 
                   )}
                 </span>
                 {renderTTSButtons(index, line.text)}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  if (hasPinyin && pinyinLyrics) {
+    const zhLyrics = lyricsMap.zh || []
+    const hasZh = zhLyrics.length > 0
+
+    if (!hasZh) {
+      return (
+        <div className="lyrics-display" ref={containerRef}>
+          <div className="lyrics-empty">请在侧边栏选择歌词文件</div>
+        </div>
+      )
+    }
+
+    const pinyinFirst = enabledLangs.indexOf('pinyin') < enabledLangs.indexOf('zh')
+
+    return (
+      <div className="lyrics-display" ref={containerRef}>
+        <div className="lyrics-content">
+          {zhLyrics.map((line, index) => (
+            <div
+              key={index}
+              className={`lyric-line-group ${index === currentIndex ? 'active' : ''}`}
+              onMouseEnter={() => setHoveredIndex(index)}
+              onMouseLeave={() => setHoveredIndex(null)}
+            >
+              <span className="lyric-line-inner">
+                {onSeek && index !== currentIndex && (
+                  <button className="lyric-seek-btn" onClick={() => onSeek(index)} title="跳转到此句">▶</button>
+                )}
+                <span className="lyric-group-lines">
+                  {pinyinFirst ? (
+                    <>
+                      <div className="lyric-sub-line pinyin-line">
+                        <span className="lyric-text">{pinyinLyrics[index]?.text || ''}</span>
+                      </div>
+                      <div className="lyric-sub-line">
+                        <span className="lyric-text">{renderLineText(line.text)}</span>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="lyric-sub-line">
+                        <span className="lyric-text">{renderLineText(line.text)}</span>
+                      </div>
+                      <div className="lyric-sub-line pinyin-line">
+                        <span className="lyric-text">{pinyinLyrics[index]?.text || ''}</span>
+                      </div>
+                    </>
+                  )}
+                </span>
               </span>
             </div>
           ))}

@@ -189,6 +189,22 @@ ruby rt {
   color: rgba(255, 255, 255, 0.25);
 }
 
+.pinyin-line .lyric-text {
+  font-size: 14px;
+  letter-spacing: 0.5px;
+  color: rgba(139, 156, 247, 0.7);
+}
+
+.lyric-line-group.active .pinyin-line .lyric-text {
+  font-size: 16px;
+  color: rgba(139, 156, 247, 0.85);
+}
+
+.lyric-line-group:not(.active) .pinyin-line .lyric-text {
+  font-size: 13px;
+  color: rgba(139, 156, 247, 0.4);
+}
+
 .tts-btn-group {
   display: flex;
   gap: 6px;

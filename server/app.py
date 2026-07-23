@@ -1,9 +1,16 @@
 import os
+import re
 import hashlib
 import requests
 import eng_to_ipa as ipa
 from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
+
+
+def normalize_ipa(ipa_str):
+    if not ipa_str:
+        return ipa_str
+    return ipa_str.lower()
 
 app = Flask(__name__)
 CORS(app)
@@ -28,6 +35,7 @@ def phonetic():
     try:
         result = ipa.convert(word)
         if result and '*' not in result:
+            result = normalize_ipa(result)
             cache[word] = result
             return jsonify({'phonetic': result})
     except Exception:
@@ -52,6 +60,7 @@ def phonetic_batch():
         try:
             ipa_result = ipa.convert(key)
             if ipa_result and '*' not in ipa_result:
+                ipa_result = normalize_ipa(ipa_result)
                 cache[key] = ipa_result
                 result[key] = ipa_result
             else:

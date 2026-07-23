@@ -9,10 +9,15 @@ const MusicPlayer = forwardRef(function MusicPlayer({
   onAutoPlayHandled,
   onPlayingChange,
   onSeek,
-  displayConfig = {},
-  displayOrder = [],
-  onToggleLang,
-  onReorderDisplay,
+  activeLang,
+  zhSettings,
+  onToggleZhSetting,
+  enSettings,
+  onToggleEnSetting,
+  onReorderEnLyrics,
+  yueSettings,
+  onToggleYueSetting,
+  onReorderYueLyrics,
 }, ref) {
   const audioRef = useRef(null)
   const [isPlaying, setIsPlaying] = useState(false)
@@ -147,11 +152,11 @@ const MusicPlayer = forwardRef(function MusicPlayer({
     }
   }
 
-  const handleDrop = (e, toIndex) => {
+  const handleDrop = (e, toIndex, onReorder) => {
     e.preventDefault()
     const fromIndex = dragIndexRef.current
     if (fromIndex !== null && fromIndex !== toIndex) {
-      onReorderDisplay?.(fromIndex, toIndex)
+      onReorder?.(fromIndex, toIndex)
     }
     dragIndexRef.current = null
     dragOverIndexRef.current = null
@@ -164,29 +169,101 @@ const MusicPlayer = forwardRef(function MusicPlayer({
     setDragOverIdx(null)
   }
 
+  const renderZhControls = () => (
+    <div className="workspace-controls zh-controls">
+      <button
+        className={`toggle-btn${zhSettings.showPinyin ? ' active' : ''}`}
+        onClick={() => onToggleZhSetting('showPinyin')}
+        title="显示/隐藏普通话拼音标注"
+      >
+        显示拼音
+      </button>
+    </div>
+  )
+
+  const renderEnControls = () => {
+    const labels = { en: '英文歌词', zh: '中文歌词' }
+    return (
+      <div className="workspace-controls en-controls">
+        <div className="toggle-group">
+          <button
+            className={`toggle-btn${enSettings.showChinese ? ' active' : ''}`}
+            onClick={() => onToggleEnSetting('showChinese')}
+            title="显示/隐藏中文歌词"
+          >
+            中文歌词
+          </button>
+          <button
+            className={`toggle-btn${enSettings.showEnglish ? ' active' : ''}`}
+            onClick={() => onToggleEnSetting('showEnglish')}
+            title="显示/隐藏英文歌词"
+          >
+            英文歌词
+          </button>
+        </div>
+        <div className="order-group">
+          <span className="order-label">显示顺序:</span>
+          {enSettings.lyricsOrder.map((lang, index) => (
+            <button
+              key={lang}
+              className={`order-btn draggable-btn${dragOverIdx === index ? ' drag-over' : ''}`}
+              draggable
+              onDragStart={(e) => handleDragStart(e, index)}
+              onDragOver={(e) => handleDragOver(e, index)}
+              onDrop={(e) => handleDrop(e, index, onReorderEnLyrics)}
+              onDragEnd={handleDragEnd}
+              title="拖拽调整歌词行顺序"
+            >
+              <span className="drag-handle">⣿</span>
+              <span>{labels[lang] || lang}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  const renderYueControls = () => {
+    const labels = { yue: '粤拼歌词', zh: '中文歌词' }
+    return (
+      <div className="workspace-controls yue-controls">
+        <button
+          className={`toggle-btn${yueSettings.showJyutping ? ' active' : ''}`}
+          onClick={() => onToggleYueSetting('showJyutping')}
+          title="显示/隐藏粤拼标注"
+        >
+          显示粤拼
+        </button>
+        <div className="order-group">
+          <span className="order-label">显示顺序:</span>
+          {yueSettings.lyricsOrder.map((lang, index) => (
+            <button
+              key={lang}
+              className={`order-btn draggable-btn${dragOverIdx === index ? ' drag-over' : ''}`}
+              draggable
+              onDragStart={(e) => handleDragStart(e, index)}
+              onDragOver={(e) => handleDragOver(e, index)}
+              onDrop={(e) => handleDrop(e, index, onReorderYueLyrics)}
+              onDragEnd={handleDragEnd}
+              title="拖拽调整歌词行顺序"
+            >
+              <span className="drag-handle">⣿</span>
+              <span>{labels[lang] || lang}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="music-player">
       <audio ref={audioRef} src={musicFile} preload="auto" />
 
       <div className="player-options">
-        <div className="option-group">
-          {displayOrder.map((lang, index) => (
-            <button
-              key={lang}
-              className={`option-btn draggable-btn${displayConfig[lang] ? ' active' : ''}${dragOverIdx === index ? ' drag-over' : ''}`}
-              onClick={() => onToggleLang?.(lang)}
-              draggable
-              onDragStart={(e) => handleDragStart(e, index)}
-              onDragOver={(e) => handleDragOver(e, index)}
-              onDrop={(e) => handleDrop(e, index)}
-              onDragEnd={handleDragEnd}
-              title={`拖拽排序 | 显示/隐藏${LANG_LABELS[lang] || lang}歌词`}
-            >
-              <span className="drag-handle">⣿</span>
-              <span>{LANG_LABELS[lang] || lang}歌词</span>
-            </button>
-          ))}
-        </div>
+        {activeLang === 'zh' && renderZhControls()}
+        {activeLang === 'en' && renderEnControls()}
+        {activeLang === 'yue' && renderYueControls()}
       </div>
 
       <div className="player-controls">

@@ -6,25 +6,22 @@ import FloatingActionMenu from './components/FloatingActionMenu'
 import { parseLRC, findCurrentLyricIndex } from './utils/lrcParser'
 import { getHistory, addHistoryEntry, removeHistoryEntry, updateEntryLyrics, removeEntryLyrics, reorderHistory, SUPPORTED_LANGS, LANG_LABELS } from './utils/historyManager'
 import { cacheAudio, getCachedAudio } from './utils/audioCache'
-import { generateJyutpingLyrics } from './utils/phoneticDict'
-
-function getDefaultDisplayConfig(lang) {
-  const cfg = {}
-  for (const l of SUPPORTED_LANGS) {
-    cfg[l] = l === lang
-  }
-  return cfg
-}
-
-function getDefaultDisplayOrder(lang) {
-  return SUPPORTED_LANGS.filter(l => l !== lang).concat([lang])
-}
+import { generateJyutpingLyrics, generatePinyinLyrics } from './utils/phoneticDict'
 
 export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [activeLang, setActiveLang] = useState('zh')
-  const [displayConfig, setDisplayConfig] = useState(() => getDefaultDisplayConfig('zh'))
-  const [displayOrder, setDisplayOrder] = useState(() => getDefaultDisplayOrder('zh'))
+
+  const [zhSettings, setZhSettings] = useState(() => ({ showPinyin: false }))
+  const [enSettings, setEnSettings] = useState(() => ({
+    showChinese: true,
+    showEnglish: true,
+    lyricsOrder: ['en', 'zh'],
+  }))
+  const [yueSettings, setYueSettings] = useState(() => ({
+    showJyutping: true,
+    lyricsOrder: ['yue', 'zh'],
+  }))
 
   const [musicFile, setMusicFile] = useState(null)
   const [musicName, setMusicName] = useState('')
@@ -41,19 +38,40 @@ export default function App() {
   const singleRepeatRef = useRef(false)
   const repeatTargetRef = useRef(-1)
   const audioUrlRef = useRef(null)
+  const activeLangRef = useRef(activeLang)
 
   const workspacesRef = useRef({
-    zh: { musicFile: null, musicName: '', lyricsMap: {}, currentIndex: -1, displayConfig: getDefaultDisplayConfig('zh'), displayOrder: getDefaultDisplayOrder('zh') },
-    en: { musicFile: null, musicName: '', lyricsMap: {}, currentIndex: -1, displayConfig: getDefaultDisplayConfig('en'), displayOrder: getDefaultDisplayOrder('en') },
-    yue: { musicFile: null, musicName: '', lyricsMap: {}, currentIndex: -1, displayConfig: getDefaultDisplayConfig('yue'), displayOrder: getDefaultDisplayOrder('yue') },
+    zh: { musicFile: null, musicName: '', lyricsMap: {}, currentIndex: -1, zhSettings: { showPinyin: false } },
+    en: { musicFile: null, musicName: '', lyricsMap: {}, currentIndex: -1, enSettings: { showChinese: true, showEnglish: true, lyricsOrder: ['en', 'zh'] } },
+    yue: { musicFile: null, musicName: '', lyricsMap: {}, currentIndex: -1, yueSettings: { showJyutping: true, lyricsOrder: ['yue', 'zh'] } },
   })
 
   const currentEntry = history.find((e) => e.musicName === musicName) || null
 
-  const enabledLangs = displayOrder.filter(l => displayConfig[l])
+  const { displayConfig, displayOrder } = (() => {
+    if (activeLang === 'zh') {
+      const cfg = { zh: true, en: false, yue: false }
+      const order = zhSettings.showPinyin ? ['pinyin', 'zh'] : ['zh']
+      return { displayConfig: cfg, displayOrder: order }
+    }
+    if (activeLang === 'en') {
+      const cfg = { zh: enSettings.showChinese, en: enSettings.showEnglish, yue: false }
+      const order = enSettings.lyricsOrder.filter(l => cfg[l])
+      return { displayConfig: cfg, displayOrder: order }
+    }
+    if (activeLang === 'yue') {
+      const cfg = { zh: true, en: false, yue: yueSettings.showJyutping }
+      const order = yueSettings.lyricsOrder.filter(l => cfg[l])
+      return { displayConfig: cfg, displayOrder: order }
+    }
+    return { displayConfig: {}, displayOrder: [] }
+  })()
+
+  const enabledLangs = displayOrder.filter(l => l === 'pinyin' || displayConfig[l])
 
   const activeLyrics = (() => {
     for (const lang of enabledLangs) {
+      if (lang === 'pinyin') continue
       if (lyricsMap[lang]?.length > 0) return lyricsMap[lang]
     }
     return []
@@ -64,7 +82,8 @@ export default function App() {
     if (isPlaying) playerRef.current?.togglePlay()
 
     workspacesRef.current[activeLang] = {
-      musicFile, musicName, lyricsMap, currentIndex, displayConfig, displayOrder,
+      musicFile, musicName, lyricsMap, currentIndex,
+      zhSettings, enSettings, yueSettings,
     }
 
     if (newLang === 'yue' && !workspacesRef.current.yue.lyricsMap.zh && lyricsMap.zh?.length > 0) {
@@ -76,8 +95,9 @@ export default function App() {
     setMusicName(snap.musicName)
     setLyricsMap(snap.lyricsMap)
     setCurrentIndex(snap.currentIndex)
-    setDisplayConfig(snap.displayConfig)
-    setDisplayOrder(snap.displayOrder)
+    setZhSettings(snap.zhSettings)
+    setEnSettings(snap.enSettings)
+    setYueSettings(snap.yueSettings)
     setHistory(getHistory(newLang))
     setCurrentTime(0)
     repeatTargetRef.current = -1
@@ -85,25 +105,62 @@ export default function App() {
     setSingleRepeat(false)
 
     setActiveLang(newLang)
-  }, [activeLang, musicFile, musicName, lyricsMap, currentIndex, displayConfig, displayOrder, isPlaying])
+  }, [activeLang, musicFile, musicName, lyricsMap, currentIndex, zhSettings, enSettings, yueSettings, isPlaying])
 
-  const handleToggleDisplayLang = useCallback((lang) => {
-    setDisplayConfig(prev => {
-      const enabledCount = Object.values(prev).filter(Boolean).length
-      if (prev[lang]) {
-        if (enabledCount <= 1) return prev
-        return { ...prev, [lang]: false }
+  const handleToggleZhSetting = useCallback((key) => {
+    setZhSettings(prev => ({ ...prev, [key]: !prev[key] }))
+  }, [])
+
+  const handleToggleEnSetting = useCallback((key) => {
+    setEnSettings(prev => {
+      const next = { ...prev, [key]: !prev[key] }
+      if (key === 'showChinese' || key === 'showEnglish') {
+        const hasVisible = next.showChinese || next.showEnglish
+        if (!hasVisible) return prev
+        if (!next[key]) {
+          next.lyricsOrder = next.lyricsOrder.filter(l => l !== (key === 'showChinese' ? 'zh' : 'en'))
+        } else {
+          const lang = key === 'showChinese' ? 'zh' : 'en'
+          if (!next.lyricsOrder.includes(lang)) {
+            next.lyricsOrder = [...next.lyricsOrder, lang]
+          }
+        }
       }
-      return { ...prev, [lang]: true }
+      return next
     })
   }, [])
 
-  const handleReorderDisplay = useCallback((fromIndex, toIndex) => {
-    setDisplayOrder(prev => {
-      const next = [...prev]
+  const handleReorderEnLyrics = useCallback((fromIndex, toIndex) => {
+    setEnSettings(prev => {
+      const next = [...prev.lyricsOrder]
       const [moved] = next.splice(fromIndex, 1)
       next.splice(toIndex, 0, moved)
+      return { ...prev, lyricsOrder: next }
+    })
+  }, [])
+
+  const handleToggleYueSetting = useCallback((key) => {
+    setYueSettings(prev => {
+      const next = { ...prev, [key]: !prev[key] }
+      if (key === 'showJyutping') {
+        if (!next.showJyutping) {
+          next.lyricsOrder = next.lyricsOrder.filter(l => l !== 'yue')
+        } else {
+          if (!next.lyricsOrder.includes('yue')) {
+            next.lyricsOrder = ['yue', ...next.lyricsOrder]
+          }
+        }
+      }
       return next
+    })
+  }, [])
+
+  const handleReorderYueLyrics = useCallback((fromIndex, toIndex) => {
+    setYueSettings(prev => {
+      const next = [...prev.lyricsOrder]
+      const [moved] = next.splice(fromIndex, 1)
+      next.splice(toIndex, 0, moved)
+      return { ...prev, lyricsOrder: next }
     })
   }, [])
 
@@ -120,6 +177,10 @@ export default function App() {
   }, [lyricsMap])
 
   useEffect(() => {
+    activeLangRef.current = activeLang
+  }, [activeLang])
+
+  useEffect(() => {
     if (lyricsMap.zh?.length > 0) {
       const jyutpingLyrics = generateJyutpingLyrics(lyricsMap.zh)
       setLyricsMap(prev => {
@@ -128,6 +189,13 @@ export default function App() {
       })
     }
   }, [lyricsMap.zh])
+
+  const pinyinLyrics = (() => {
+    if (activeLang === 'zh' && zhSettings.showPinyin && lyricsMap.zh?.length > 0) {
+      return generatePinyinLyrics(lyricsMap.zh)
+    }
+    return null
+  })()
 
   const saveHistory = useCallback(() => {
     if (!musicName) return
@@ -186,8 +254,11 @@ export default function App() {
         parsedMap[lang] = parseLRC(lyrics[lang].text)
       }
     }
-    if (activeLang === 'yue' && parsedMap.zh) {
+    const lang = activeLangRef.current
+    if (lang === 'yue' && parsedMap.zh) {
       parsedMap.yue = generateJyutpingLyrics(parsedMap.zh)
+    } else if (lang === 'zh' && parsedMap.zh) {
+      parsedMap.pinyin = null
     }
     setLyricsMap(parsedMap)
     setCurrentIndex(-1)
@@ -326,6 +397,7 @@ export default function App() {
     if (!currentEntry?.lyrics) return ''
     const names = []
     for (const lang of enabledLangs) {
+      if (lang === 'pinyin') continue
       if (currentEntry.lyrics[lang]?.name) {
         names.push(currentEntry.lyrics[lang].name)
       }
@@ -375,6 +447,7 @@ export default function App() {
           activeLang={activeLang}
           onPauseMusic={handlePauseMusic}
           onResumeMusic={handleResumeMusic}
+          pinyinLyrics={pinyinLyrics}
         />
 
         <MusicPlayer
@@ -385,10 +458,15 @@ export default function App() {
           onAutoPlayHandled={() => setAutoPlay(false)}
           onPlayingChange={setIsPlaying}
           onSeek={handleSeekFromBar}
-          displayConfig={displayConfig}
-          displayOrder={displayOrder}
-          onToggleLang={handleToggleDisplayLang}
-          onReorderDisplay={handleReorderDisplay}
+          activeLang={activeLang}
+          zhSettings={zhSettings}
+          onToggleZhSetting={handleToggleZhSetting}
+          enSettings={enSettings}
+          onToggleEnSetting={handleToggleEnSetting}
+          onReorderEnLyrics={handleReorderEnLyrics}
+          yueSettings={yueSettings}
+          onToggleYueSetting={handleToggleYueSetting}
+          onReorderYueLyrics={handleReorderYueLyrics}
         />
 
         <FloatingActionMenu items={[

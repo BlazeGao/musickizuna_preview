@@ -1,4 +1,5 @@
 import ToJyutping from 'to-jyutping'
+import { pinyin } from 'pinyin-pro'
 
 const API_BASE = 'http://127.0.0.1:5001'
 
@@ -41,5 +42,12 @@ export function generateJyutpingLyrics(zhLyrics) {
   return zhLyrics.map(line => ({
     time: line.time,
     text: ToJyutping.getJyutpingText(line.text),
+  }))
+}
+
+export function generatePinyinLyrics(zhLyrics) {
+  return zhLyrics.map(line => ({
+    time: line.time,
+    text: pinyin(line.text, { toneType: 'symbol' }),
   }))
 }
