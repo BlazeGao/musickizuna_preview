@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { fetchPhonetic } from '../utils/phoneticDict'
+import { readLyric, stopCurrentAudio } from '../utils/cantoneseTTS'
 import './LyricsDisplay.css'
 
 function tokenize(text) {
@@ -20,9 +21,11 @@ function tokenize(text) {
   return tokens
 }
 
-export default function LyricsDisplay({ lyricsMap, displayConfig, displayOrder, currentIndex, onSeek }) {
+export default function LyricsDisplay({ lyricsMap, displayConfig, displayOrder, currentIndex, onSeek, activeLang, onPauseMusic, onResumeMusic }) {
   const containerRef = useRef(null)
   const [selectedWords, setSelectedWords] = useState(new Map())
+  const [hoveredIndex, setHoveredIndex] = useState(null)
+  const [ttsLoading, setTtsLoading] = useState(null)
 
   useEffect(() => {
     const container = containerRef.current
@@ -66,6 +69,48 @@ export default function LyricsDisplay({ lyricsMap, displayConfig, displayOrder, 
       return next
     })
   }, [])
+
+  const handleReadLyric = useCallback(async (text, playbackRate = 1) => {
+    setTtsLoading(true)
+    const wasPlaying = onPauseMusic ? onPauseMusic() : false
+    try {
+      await readLyric(text, playbackRate)
+    } catch (err) {
+      console.error('TTS error:', err)
+    } finally {
+      setTtsLoading(false)
+      if (wasPlaying && onResumeMusic) onResumeMusic()
+    }
+  }, [onPauseMusic, onResumeMusic])
+
+  const handleStopTTS = useCallback(() => {
+    stopCurrentAudio()
+    setTtsLoading(false)
+  }, [])
+
+  const renderTTSButtons = (lineIndex, text) => {
+    if (activeLang !== 'yue') return null
+    if (hoveredIndex !== lineIndex) return null
+
+    return (
+      <span className="tts-btn-group">
+        {ttsLoading ? (
+          <button className="tts-btn tts-btn-loading" onClick={handleStopTTS} title="停止朗读">
+            停止
+          </button>
+        ) : (
+          <>
+            <button className="tts-btn" onClick={() => handleReadLyric(text, 1)} title="朗读">
+              朗读
+            </button>
+            <button className="tts-btn" onClick={() => handleReadLyric(text, 0.8)} title="慢速朗读">
+              慢速朗读
+            </button>
+          </>
+        )}
+      </span>
+    )
+  }
 
   const renderLineText = (text) => {
     const tokens = tokenize(text)
@@ -122,12 +167,18 @@ export default function LyricsDisplay({ lyricsMap, displayConfig, displayOrder, 
         <div className="lyrics-display" ref={containerRef}>
           <div className="lyrics-content">
             {fallback.map((line, index) => (
-              <div key={index} className={`lyric-line ${index === currentIndex ? 'active' : ''}`}>
+              <div
+                key={index}
+                className={`lyric-line ${index === currentIndex ? 'active' : ''}`}
+                onMouseEnter={() => setHoveredIndex(index)}
+                onMouseLeave={() => setHoveredIndex(null)}
+              >
                 <span className="lyric-line-inner">
                   {onSeek && index !== currentIndex && (
                     <button className="lyric-seek-btn" onClick={() => onSeek(index)} title="跳转到此句">▶</button>
                   )}
                   <span className="lyric-text">{renderLineText(line.text)}</span>
+                  {renderTTSButtons(index, line.text)}
                 </span>
               </div>
             ))}
@@ -140,7 +191,12 @@ export default function LyricsDisplay({ lyricsMap, displayConfig, displayOrder, 
       <div className="lyrics-display" ref={containerRef}>
         <div className="lyrics-content">
           {zhLyrics.map((line, index) => (
-            <div key={index} className={`lyric-line-group ${index === currentIndex ? 'active' : ''}`}>
+            <div
+              key={index}
+              className={`lyric-line-group ${index === currentIndex ? 'active' : ''}`}
+              onMouseEnter={() => setHoveredIndex(index)}
+              onMouseLeave={() => setHoveredIndex(null)}
+            >
               <span className="lyric-line-inner">
                 {onSeek && index !== currentIndex && (
                   <button className="lyric-seek-btn" onClick={() => onSeek(index)} title="跳转到此句">▶</button>
@@ -160,6 +216,7 @@ export default function LyricsDisplay({ lyricsMap, displayConfig, displayOrder, 
                     </div>
                   )}
                 </span>
+                {renderTTSButtons(index, line.text)}
               </span>
             </div>
           ))}
@@ -184,12 +241,15 @@ export default function LyricsDisplay({ lyricsMap, displayConfig, displayOrder, 
               <div
                 key={index}
                 className={`lyric-line ${index === currentIndex ? 'active' : ''}`}
+                onMouseEnter={() => setHoveredIndex(index)}
+                onMouseLeave={() => setHoveredIndex(null)}
               >
                 <span className="lyric-line-inner">
                   {onSeek && index !== currentIndex && (
                     <button className="lyric-seek-btn" onClick={() => onSeek(index)} title="跳转到此句">▶</button>
                   )}
                   <span className="lyric-text">{renderLineText(line.text)}</span>
+                  {renderTTSButtons(index, line.text)}
                 </span>
               </div>
             ))}
@@ -205,6 +265,8 @@ export default function LyricsDisplay({ lyricsMap, displayConfig, displayOrder, 
             <div
               key={index}
               className={`lyric-line-group ${index === currentIndex ? 'active' : ''}`}
+              onMouseEnter={() => setHoveredIndex(index)}
+              onMouseLeave={() => setHoveredIndex(null)}
             >
               <span className="lyric-line-inner">
                 {onSeek && index !== currentIndex && (
@@ -218,6 +280,7 @@ export default function LyricsDisplay({ lyricsMap, displayConfig, displayOrder, 
                     <span className="lyric-text">{secondaryLyrics[index]?.text || ''}</span>
                   </div>
                 </span>
+                {renderTTSButtons(index, line.text)}
               </span>
             </div>
           ))}
@@ -226,8 +289,8 @@ export default function LyricsDisplay({ lyricsMap, displayConfig, displayOrder, 
     )
   }
 
-  const activeLang = enabledLangs[0] || 'zh'
-  const lyrics = lyricsMap[activeLang] || []
+  const singleLang = enabledLangs[0] || 'zh'
+  const lyrics = lyricsMap[singleLang] || []
 
   return (
     <div className="lyrics-display" ref={containerRef}>
@@ -236,12 +299,15 @@ export default function LyricsDisplay({ lyricsMap, displayConfig, displayOrder, 
           <div
             key={index}
             className={`lyric-line ${index === currentIndex ? 'active' : ''}`}
+            onMouseEnter={() => setHoveredIndex(index)}
+            onMouseLeave={() => setHoveredIndex(null)}
           >
             <span className="lyric-line-inner">
               {onSeek && index !== currentIndex && (
                 <button className="lyric-seek-btn" onClick={() => onSeek(index)} title="跳转到此句">▶</button>
               )}
               <span className="lyric-text">{renderLineText(line.text)}</span>
+              {renderTTSButtons(index, line.text)}
             </span>
           </div>
         ))}

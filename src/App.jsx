@@ -308,6 +308,20 @@ export default function App() {
     setHistory(updated)
   }, [activeLang])
 
+  const handlePauseMusic = useCallback(() => {
+    if (isPlaying) {
+      playerRef.current?.togglePlay()
+      return true
+    }
+    return false
+  }, [isPlaying])
+
+  const handleResumeMusic = useCallback(() => {
+    if (!isPlaying) {
+      playerRef.current?.togglePlay()
+    }
+  }, [isPlaying])
+
   const currentLyricsName = (() => {
     if (!currentEntry?.lyrics) return ''
     const names = []
@@ -358,6 +372,9 @@ export default function App() {
           displayOrder={displayOrder}
           currentIndex={currentIndex}
           onSeek={handleSeekToLine}
+          activeLang={activeLang}
+          onPauseMusic={handlePauseMusic}
+          onResumeMusic={handleResumeMusic}
         />
 
         <MusicPlayer
