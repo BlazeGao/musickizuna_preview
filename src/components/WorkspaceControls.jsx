@@ -137,6 +137,13 @@ function WorkspaceControls({ activeLang, settings, onToggleSetting, onReorderLyr
           >
             中文翻译
           </button>
+          <button
+            className={`toggle-btn${settings.ja.showFurigana ? ' active' : ''}`}
+            onClick={() => onToggleSetting('ja', 'showFurigana')}
+            title="显示/隐藏汉字振假名"
+          >
+            振假名
+          </button>
         </div>
         {renderOrderGroup(settings.ja.lyricsOrder)}
       </div>

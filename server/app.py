@@ -3,6 +3,7 @@ import re
 import hashlib
 import requests
 import eng_to_ipa as ipa
+import pykakasi
 from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 
@@ -16,6 +17,14 @@ app = Flask(__name__)
 CORS(app, origins=['http://localhost:5173', 'http://127.0.0.1:5173'])
 
 cache = {}
+furigana_cache = {}
+
+_kks = pykakasi.kakasi()
+
+
+def _furigana_tokens(text):
+    result = _kks.convert(text)
+    return [{'surface': r['orig'], 'reading': r['hira']} for r in result]
 
 TTS_CACHE_DIR = os.path.join(os.path.dirname(__file__), 'tts_cache')
 os.makedirs(TTS_CACHE_DIR, exist_ok=True)
@@ -135,6 +144,42 @@ def tts():
         return jsonify({'error': 'TTS API timeout'}), 504
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/furigana')
+def furigana():
+    text = request.args.get('text', '').strip()
+    if not text:
+        return jsonify({'tokens': []})
+    if text in furigana_cache:
+        return jsonify({'tokens': furigana_cache[text]})
+    try:
+        tokens = _furigana_tokens(text)
+        furigana_cache[text] = tokens
+        return jsonify({'tokens': tokens})
+    except Exception:
+        return jsonify({'tokens': []})
+
+
+@app.route('/api/furigana/batch', methods=['POST'])
+def furigana_batch():
+    data = request.get_json() or {}
+    texts = data.get('texts', [])
+    results = []
+    for text in texts:
+        if not text:
+            results.append([])
+            continue
+        if text in furigana_cache:
+            results.append(furigana_cache[text])
+            continue
+        try:
+            tokens = _furigana_tokens(text)
+            furigana_cache[text] = tokens
+            results.append(tokens)
+        except Exception:
+            results.append([])
+    return jsonify({'results': results})
 
 
 if __name__ == '__main__':

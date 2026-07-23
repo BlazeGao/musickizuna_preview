@@ -7,6 +7,7 @@ export const WORKSPACE_DEFAULTS = {
   ja: {
     showChinese: true,
     showJapanese: true,
+    showFurigana: true,
     lyricsOrder: ['ja', 'zh'],
   },
 }

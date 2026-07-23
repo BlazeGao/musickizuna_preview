@@ -213,6 +213,21 @@ ruby rt {
   color: rgba(255, 255, 255, 0.7);
 }
 
+.furigana-ruby rt {
+  font-size: 0.45em;
+  color: rgba(255, 200, 120, 0.75);
+  font-weight: 400;
+  letter-spacing: 0.5px;
+}
+
+.lyric-line-group.active .furigana-ruby rt {
+  color: rgba(255, 200, 120, 0.9);
+}
+
+.lyric-line-group:not(.active) .furigana-ruby rt {
+  color: rgba(255, 200, 120, 0.45);
+}
+
 .romaji-line .lyric-text {
   font-size: 13px;
   letter-spacing: 0.5px;

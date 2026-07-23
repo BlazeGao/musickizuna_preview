@@ -7,7 +7,7 @@ import FloatingActionMenu from './components/FloatingActionMenu'
 import { parseLRC, findCurrentLyricIndex } from './utils/lrcParser'
 import { getHistory, addHistoryEntry, removeHistoryEntry, updateEntryLyrics, removeEntryLyrics, reorderHistory } from './utils/historyManager'
 import { cacheAudio, getCachedAudio } from './utils/audioCache'
-import { generateJyutpingLyrics, generatePinyinLyrics } from './utils/phoneticDict'
+import { generateJyutpingLyrics, generatePinyinLyrics, fetchFuriganaBatch, getCachedFurigana } from './utils/phoneticDict'
 import { useAllWorkspaceSettings } from './utils/workspaceSettings'
 
 const DEFAULT_WORKSPACE = () => ({ musicFile: null, musicName: '', lyricsMap: {}, currentIndex: -1 })
@@ -21,6 +21,7 @@ export default function App() {
   const [musicFile, setMusicFile] = useState(null)
   const [musicName, setMusicName] = useState('')
   const [lyricsMap, setLyricsMap] = useState({})
+  const [furiganaMap, setFuriganaMap] = useState({})
   const [currentIndex, setCurrentIndex] = useState(-1)
   const [history, setHistory] = useState(() => getHistory('zh'))
   const [currentTime, setCurrentTime] = useState(0)
@@ -107,10 +108,11 @@ export default function App() {
     if (newLang === activeLang) return
     if (isPlaying) playerRef.current?.togglePlay()
 
-    workspacesRef.current[activeLang] = { musicFile, musicName, lyricsMap, currentIndex }
+    workspacesRef.current[activeLang] = { musicFile, musicName, lyricsMap, furiganaMap, currentIndex }
 
     const snap = workspacesRef.current[newLang]
     let nextLyricsMap = { ...snap.lyricsMap }
+    let nextFuriganaMap = { ...(snap.furiganaMap || {}) }
 
     if (newLang === 'yue' && !snap.lyricsMap.zh && lyricsMap.zh?.length > 0) {
       nextLyricsMap = { ...nextLyricsMap, zh: lyricsMap.zh }
@@ -118,11 +120,12 @@ export default function App() {
       nextLyricsMap = { ...nextLyricsMap, ja: lyricsMap.ja, zh: lyricsMap.zh || snap.lyricsMap.zh }
     }
 
-    workspacesRef.current[newLang] = { ...snap, lyricsMap: nextLyricsMap }
+    workspacesRef.current[newLang] = { ...snap, lyricsMap: nextLyricsMap, furiganaMap: nextFuriganaMap }
 
     setMusicFile(snap.musicFile)
     setMusicName(snap.musicName)
     setLyricsMap(nextLyricsMap)
+    setFuriganaMap(nextFuriganaMap)
     setCurrentIndex(snap.currentIndex)
     setHistory(getHistory(newLang))
     setCurrentTime(0)
@@ -131,7 +134,7 @@ export default function App() {
     setSingleRepeat(false)
 
     setActiveLang(newLang)
-  }, [activeLang, musicFile, musicName, lyricsMap, currentIndex, isPlaying])
+  }, [activeLang, musicFile, musicName, lyricsMap, furiganaMap, currentIndex, isPlaying])
 
   const handleToggleSingleRepeat = useCallback(() => {
     setSingleRepeat((prev) => {
@@ -155,6 +158,27 @@ export default function App() {
     }
   }, [lyricsMap.zh])
 
+  useEffect(() => {
+    const jaLyrics = lyricsMap.ja
+    if (!jaLyrics || jaLyrics.length === 0) {
+      setFuriganaMap((prev) => (Object.keys(prev).length === 0 ? prev : {}))
+      return
+    }
+    const texts = jaLyrics.map((l) => l.text)
+    const allCached = texts.every((t) => getCachedFurigana(t) !== null)
+    if (allCached) {
+      const tokens = texts.map((t) => getCachedFurigana(t))
+      setFuriganaMap({ ja: tokens })
+      return
+    }
+    let cancelled = false
+    fetchFuriganaBatch(texts).then((tokens) => {
+      if (cancelled) return
+      setFuriganaMap({ ja: tokens })
+    })
+    return () => { cancelled = true }
+  }, [lyricsMap.ja])
+
   const handleMusicSelect = useCallback((file) => {
     if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current)
     const url = URL.createObjectURL(file)
@@ -163,6 +187,7 @@ export default function App() {
     setMusicFile(url)
     setMusicName(file.name)
     setLyricsMap({})
+    setFuriganaMap({})
   }, [])
 
   const handleLyricsSelect = useCallback(async (file, lang = 'zh') => {
@@ -388,6 +413,8 @@ export default function App() {
           onPauseMusic={handlePauseMusic}
           onResumeMusic={handleResumeMusic}
           pinyinLyrics={pinyinLyrics}
+          furiganaMap={furiganaMap}
+          showFurigana={wsSettings.ja.showFurigana}
         />
 
         <MusicPlayer

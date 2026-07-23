@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, memo } from 'react'
-import { fetchPhonetic } from '../utils/phoneticDict'
+import { fetchPhonetic, buildRubySegments } from '../utils/phoneticDict'
 import { readLyric, stopCurrentAudio } from '../utils/tts'
 import './LyricsDisplay.css'
 
@@ -65,6 +65,20 @@ const LyricLineGroup = memo(function LyricLineGroup({ line, index, isActive, onH
   )
 })
 
+function renderRubyText(text, tokens) {
+  const segments = buildRubySegments(text, tokens)
+  return segments.map((seg, i) => {
+    if (seg.type === 'ruby') {
+      return (
+        <ruby key={i} className="furigana-ruby">
+          {seg.value}<rt>{seg.reading}</rt>
+        </ruby>
+      )
+    }
+    return <span key={i}>{seg.value}</span>
+  })
+}
+
 function renderTTSButtons(lineIndex, text, ttsLoading, onReadLyric, onStopTTS) {
   return (
     <span className="tts-btn-group">
@@ -86,7 +100,7 @@ function renderTTSButtons(lineIndex, text, ttsLoading, onReadLyric, onStopTTS) {
   )
 }
 
-export default function LyricsDisplay({ lyricsMap, displayConfig, displayOrder, currentIndex, onSeek, activeLang, onPauseMusic, onResumeMusic, pinyinLyrics }) {
+export default function LyricsDisplay({ lyricsMap, displayConfig, displayOrder, currentIndex, onSeek, activeLang, onPauseMusic, onResumeMusic, pinyinLyrics, furiganaMap, showFurigana }) {
   const containerRef = useRef(null)
   const [selectedWords, setSelectedWords] = useState(new Map())
   const [hoveredIndex, setHoveredIndex] = useState(null)
@@ -312,6 +326,8 @@ export default function LyricsDisplay({ lyricsMap, displayConfig, displayOrder, 
     const jaLyrics = lyricsMap.ja || []
     const zhLyrics = enabledLangs.includes('zh') ? (lyricsMap.zh || []) : []
     const hasZh = zhLyrics.length > 0
+    const renderFurigana = !!showFurigana && (furiganaMap?.ja?.length ?? 0) > 0
+    const furiganaTokens = furiganaMap?.ja || []
 
     if (jaLyrics.length === 0 && zhLyrics.length === 0) return renderEmpty('ja-empty')
 
@@ -324,7 +340,8 @@ export default function LyricsDisplay({ lyricsMap, displayConfig, displayOrder, 
             const subLines = []
             const jaLine = jaLyrics[index]
             if (jaLine) {
-              subLines.push({ className: 'japanese-line', content: renderLineText(jaLine.text) })
+              const tokens = renderFurigana ? (furiganaTokens[index] || []) : []
+              subLines.push({ className: 'japanese-line', content: renderRubyText(jaLine.text, tokens) })
             }
             if (hasZh) {
               subLines.push({ className: 'chinese-line', content: zhLyrics[index]?.text || '' })
