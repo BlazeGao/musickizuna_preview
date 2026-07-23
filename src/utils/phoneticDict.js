@@ -108,6 +108,88 @@ export async function fetchFuriganaBatch(texts) {
 
 const KANJI_RE = /[㐀-鿿豈-﫿぀-ヿ㇀-ㇿ]/
 
+function isKanjiChar(c) {
+  const code = c.charCodeAt(0)
+  return (
+    (code >= 0x4e00 && code <= 0x9fff) ||
+    (code >= 0x3400 && code <= 0x4dbf) ||
+    (code >= 0x20000 && code <= 0x2a6df) ||
+    code === 0x3005 ||
+    code === 0x3007
+  )
+}
+
+function isKanaChar(c) {
+  const code = c.charCodeAt(0)
+  return (
+    (code >= 0x3040 && code <= 0x309f) ||
+    (code >= 0x30a0 && code <= 0x30ff) ||
+    (code >= 0xff66 && code <= 0xff9f)
+  )
+}
+
+function tokenizeKanjiKana(surface, reading) {
+  if (!surface) return []
+  if (!reading || surface === reading) {
+    return [{ type: 'text', value: surface }]
+  }
+
+  const runs = []
+  let i = 0
+  while (i < surface.length) {
+    const c = surface[i]
+    let j = i + 1
+    if (isKanjiChar(c)) {
+      while (j < surface.length && isKanjiChar(surface[j])) j++
+      runs.push({ kind: 'kanji', value: surface.slice(i, j) })
+    } else if (isKanaChar(c)) {
+      while (j < surface.length && isKanaChar(surface[j])) j++
+      runs.push({ kind: 'kana', value: surface.slice(i, j) })
+    } else {
+      while (j < surface.length && !isKanjiChar(surface[j]) && !isKanaChar(surface[j])) j++
+      runs.push({ kind: 'other', value: surface.slice(i, j) })
+    }
+    i = j
+  }
+
+  const kanaSpans = []
+  let r = 0
+  for (const run of runs) {
+    if (run.kind !== 'kana') continue
+    const idx = reading.indexOf(run.value, r)
+    if (idx >= 0) {
+      kanaSpans.push({ start: idx, end: idx + run.value.length })
+      r = idx + run.value.length
+    }
+  }
+
+  const segments = []
+  let prevEnd = 0
+  let spanIdx = 0
+  for (const run of runs) {
+    if (run.kind === 'kanji') {
+      const nextSpan = kanaSpans[spanIdx] || null
+      const kanjiReadingEnd = nextSpan ? nextSpan.start : reading.length
+      const kanjiReading = reading.slice(prevEnd, kanjiReadingEnd)
+      if (nextSpan) {
+        prevEnd = nextSpan.end
+        spanIdx++
+      } else {
+        prevEnd = kanjiReadingEnd
+      }
+      if (kanjiReading) {
+        segments.push({ type: 'ruby', value: run.value, reading: kanjiReading })
+      } else {
+        segments.push({ type: 'text', value: run.value })
+      }
+    } else {
+      segments.push({ type: 'text', value: run.value })
+    }
+  }
+
+  return segments
+}
+
 export function buildRubySegments(text, tokens) {
   if (!tokens || tokens.length === 0) {
     return [{ type: 'text', value: text }]
@@ -128,9 +210,13 @@ export function buildRubySegments(text, tokens) {
       segments.push({ type: 'text', value: text.slice(cursor, idx) })
     }
 
-    const needsRuby = reading && (surface !== reading || KANJI_RE.test(surface))
-    if (needsRuby) {
-      segments.push({ type: 'ruby', value: surface, reading })
+    if (reading && KANJI_RE.test(surface)) {
+      const sub = tokenizeKanjiKana(surface, reading)
+      if (sub.length > 0) {
+        for (const s of sub) segments.push(s)
+      } else {
+        segments.push({ type: 'text', value: surface })
+      }
     } else {
       segments.push({ type: 'text', value: surface })
     }
