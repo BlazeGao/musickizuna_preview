@@ -36,5 +36,5 @@ export function findCurrentLyricIndex(lyrics, currentTime) {
       return i
     }
   }
-  return 0
+  return -1
 }

@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import './FloatingActionMenu.css'
 
 const DRAG_THRESHOLD = 4
@@ -49,6 +49,8 @@ const ICONS = {
 export default function FloatingActionMenu({ items = [] }) {
   const [open, setOpen] = useState(false)
   const [pos, setPos] = useState({ bottom: 32, right: 32 })
+  const posRef = useRef(pos)
+  useEffect(() => { posRef.current = pos }, [pos])
   const dragRef = useRef({ dragging: false, startX: 0, startY: 0, startBottom: 0, startRight: 0, moved: false })
 
   const handlePointerDown = useCallback((e) => {
@@ -58,8 +60,8 @@ export default function FloatingActionMenu({ items = [] }) {
     d.moved = false
     d.startX = e.clientX
     d.startY = e.clientY
-    d.startBottom = pos.bottom
-    d.startRight = pos.right
+    d.startBottom = posRef.current.bottom
+    d.startRight = posRef.current.right
 
     const onMove = (ev) => {
       if (!d.dragging) return
@@ -77,7 +79,7 @@ export default function FloatingActionMenu({ items = [] }) {
 
     window.addEventListener('pointermove', onMove)
     window.addEventListener('pointerup', onUp)
-  }, [pos])
+  }, [])
 
   const handleToggle = useCallback(() => {
     if (dragRef.current.moved) return

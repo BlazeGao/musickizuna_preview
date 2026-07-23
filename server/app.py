@@ -13,7 +13,7 @@ def normalize_ipa(ipa_str):
     return ipa_str.lower()
 
 app = Flask(__name__)
-CORS(app)
+CORS(app, origins=['http://localhost:5173', 'http://127.0.0.1:5173'])
 
 cache = {}
 
@@ -75,6 +75,7 @@ def phonetic_batch():
 def tts():
     data = request.get_json() or {}
     text = data.get('text', '').strip()
+    lang = data.get('lang', 'zh')
 
     if not text:
         return jsonify({'error': 'text is required'}), 400
@@ -83,11 +84,18 @@ def tts():
     if not api_key:
         return jsonify({'error': 'QWEN_TTS_API_KEY not configured'}), 500
 
-    cache_key = hashlib.md5(text.encode()).hexdigest()
+    cache_key_str = f'{lang}:{text}'
+    cache_key = hashlib.md5(cache_key_str.encode()).hexdigest()
     audio_file = os.path.join(TTS_CACHE_DIR, f'{cache_key}.wav')
 
     if os.path.exists(audio_file):
-        return send_file(audio_file, mimetype='audio/wav')
+        return send_file(audio_file, mimetype='audio/wav', conditional=True)
+
+    voice = 'Kiki'
+    language_type = 'Chinese'
+    if lang == 'ja':
+        voice = 'Ono_Anna'
+        language_type = 'Japanese'
 
     try:
         resp = requests.post(
@@ -100,8 +108,8 @@ def tts():
                 'model': 'qwen3-tts-flash',
                 'input': {
                     'text': text,
-                    'voice': 'Kiki',
-                    'language_type': 'Chinese',
+                    'voice': voice,
+                    'language_type': language_type,
                 },
             },
             timeout=30,
@@ -121,7 +129,7 @@ def tts():
         with open(audio_file, 'wb') as f:
             f.write(audio_resp.content)
 
-        return send_file(audio_file, mimetype='audio/wav')
+        return send_file(audio_file, mimetype='audio/wav', conditional=True)
 
     except requests.Timeout:
         return jsonify({'error': 'TTS API timeout'}), 504

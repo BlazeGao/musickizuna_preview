@@ -37,11 +37,11 @@ async function setCachedBlob(key, blob) {
   })
 }
 
-async function fetchTTSFromServer(text) {
+async function fetchTTSFromServer(text, lang) {
   const resp = await fetch(`${API_BASE}/api/tts`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ text }),
+    body: JSON.stringify({ text, lang }),
   })
 
   if (!resp.ok) {
@@ -52,14 +52,14 @@ async function fetchTTSFromServer(text) {
   return await resp.blob()
 }
 
-export async function readLyric(text, playbackRate = 1) {
+export async function readLyric(text, playbackRate = 1, lang = 'zh') {
   stopCurrentAudio()
 
-  const cacheKey = text
+  const cacheKey = `${lang}_${text}`
   let blob = await getCachedBlob(cacheKey)
 
   if (!blob) {
-    blob = await fetchTTSFromServer(text)
+    blob = await fetchTTSFromServer(text, lang)
     setCachedBlob(cacheKey, blob).catch(() => {})
   }
 

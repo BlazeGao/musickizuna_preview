@@ -17,7 +17,7 @@ export default function NowPlaying({
 }) {
   const inputRefs = useRef({})
 
-  const availableLangs = activeLang === 'en' ? ['zh', 'en'] : activeLang === 'yue' ? ['zh'] : [activeLang]
+  const availableLangs = activeLang === 'en' ? ['zh', 'en'] : activeLang === 'yue' ? ['zh'] : activeLang === 'ja' ? ['ja', 'zh'] : [activeLang]
   const lyrics = entry.lyrics || {}
   const boundLangs = availableLangs.filter((l) => lyrics[l]?.name)
   const unboundLangs = availableLangs.filter((l) => !lyrics[l]?.name)

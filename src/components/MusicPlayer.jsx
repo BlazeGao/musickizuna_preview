@@ -1,5 +1,4 @@
 import { useState, useRef, useEffect, useCallback, forwardRef, useImperativeHandle } from 'react'
-import { LANG_LABELS } from '../utils/historyManager'
 import './MusicPlayer.css'
 
 const MusicPlayer = forwardRef(function MusicPlayer({
@@ -9,29 +8,22 @@ const MusicPlayer = forwardRef(function MusicPlayer({
   onAutoPlayHandled,
   onPlayingChange,
   onSeek,
-  activeLang,
-  zhSettings,
-  onToggleZhSetting,
-  enSettings,
-  onToggleEnSetting,
-  onReorderEnLyrics,
-  yueSettings,
-  onToggleYueSetting,
-  onReorderYueLyrics,
 }, ref) {
   const audioRef = useRef(null)
   const [isPlaying, setIsPlaying] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(0)
   const [volume, setVolume] = useState(1)
-  const dragIndexRef = useRef(null)
-  const dragOverIndexRef = useRef(null)
-  const [dragOverIdx, setDragOverIdx] = useState(null)
+
+  const onTimeUpdateRef = useRef(onTimeUpdate)
+  const onPlayingChangeRef = useRef(onPlayingChange)
+  useEffect(() => { onTimeUpdateRef.current = onTimeUpdate }, [onTimeUpdate])
+  useEffect(() => { onPlayingChangeRef.current = onPlayingChange }, [onPlayingChange])
 
   const syncPlaying = useCallback((val) => {
     setIsPlaying(val)
-    onPlayingChange?.(val)
-  }, [onPlayingChange])
+    onPlayingChangeRef.current?.(val)
+  }, [])
 
   useImperativeHandle(ref, () => ({
     togglePlay() {
@@ -43,8 +35,21 @@ const MusicPlayer = forwardRef(function MusicPlayer({
     seekTo(time) {
       const audio = audioRef.current
       if (!audio) return
-      audio.currentTime = time
-      setCurrentTime(time)
+      const apply = () => {
+        try {
+          audio.currentTime = time
+          setCurrentTime(time)
+        } catch {}
+      }
+      if (audio.readyState >= 1) {
+        apply()
+      } else {
+        const onReady = () => {
+          audio.removeEventListener('loadedmetadata', onReady)
+          apply()
+        }
+        audio.addEventListener('loadedmetadata', onReady)
+      }
     },
     get isPlaying() { return !audioRef.current?.paused },
     get currentTime() { return audioRef.current?.currentTime ?? 0 },
@@ -56,7 +61,7 @@ const MusicPlayer = forwardRef(function MusicPlayer({
 
     const handleTimeUpdate = () => {
       setCurrentTime(audio.currentTime)
-      onTimeUpdate?.(audio.currentTime)
+      onTimeUpdateRef.current?.(audio.currentTime)
     }
     const handleLoadedMetadata = () => setDuration(audio.duration)
     const handleEnded = () => syncPlaying(false)
@@ -76,7 +81,7 @@ const MusicPlayer = forwardRef(function MusicPlayer({
       audio.removeEventListener('play', handlePlay)
       audio.removeEventListener('pause', handlePause)
     }
-  }, [musicFile, onTimeUpdate])
+  }, [musicFile, syncPlaying])
 
   useEffect(() => {
     const audio = audioRef.current
@@ -85,7 +90,7 @@ const MusicPlayer = forwardRef(function MusicPlayer({
       syncPlaying(false)
       setCurrentTime(0)
     }
-  }, [musicFile])
+  }, [musicFile, syncPlaying])
 
   useEffect(() => {
     if (autoPlay && musicFile) {
@@ -106,7 +111,7 @@ const MusicPlayer = forwardRef(function MusicPlayer({
         onAutoPlayHandled?.()
       }
     }
-  }, [autoPlay, musicFile, onAutoPlayHandled])
+  }, [autoPlay, musicFile, onAutoPlayHandled, syncPlaying])
 
   const togglePlay = useCallback(() => {
     const audio = audioRef.current
@@ -114,22 +119,24 @@ const MusicPlayer = forwardRef(function MusicPlayer({
     if (audio.paused) audio.play(); else audio.pause()
   }, [])
 
-  const handleSeek = (e) => {
+  const handleSeek = useCallback((e) => {
     const audio = audioRef.current
     if (!audio) return
     const time = parseFloat(e.target.value)
-    audio.currentTime = time
+    if (audio.readyState >= 1) {
+      try { audio.currentTime = time } catch {}
+    }
     setCurrentTime(time)
     onSeek?.(time)
-  }
+  }, [onSeek])
 
-  const handleVolume = (e) => {
+  const handleVolume = useCallback((e) => {
     const audio = audioRef.current
     if (!audio) return
     const vol = parseFloat(e.target.value)
     audio.volume = vol
     setVolume(vol)
-  }
+  }, [])
 
   const formatTime = (t) => {
     const mins = Math.floor(t / 60)
@@ -137,135 +144,9 @@ const MusicPlayer = forwardRef(function MusicPlayer({
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
   }
 
-  const handleDragStart = (e, index) => {
-    dragIndexRef.current = index
-    e.dataTransfer.effectAllowed = 'move'
-    e.dataTransfer.setData('text/plain', index)
-  }
-
-  const handleDragOver = (e, index) => {
-    e.preventDefault()
-    e.dataTransfer.dropEffect = 'move'
-    if (dragOverIndexRef.current !== index) {
-      dragOverIndexRef.current = index
-      setDragOverIdx(index)
-    }
-  }
-
-  const handleDrop = (e, toIndex, onReorder) => {
-    e.preventDefault()
-    const fromIndex = dragIndexRef.current
-    if (fromIndex !== null && fromIndex !== toIndex) {
-      onReorder?.(fromIndex, toIndex)
-    }
-    dragIndexRef.current = null
-    dragOverIndexRef.current = null
-    setDragOverIdx(null)
-  }
-
-  const handleDragEnd = () => {
-    dragIndexRef.current = null
-    dragOverIndexRef.current = null
-    setDragOverIdx(null)
-  }
-
-  const renderZhControls = () => (
-    <div className="workspace-controls zh-controls">
-      <button
-        className={`toggle-btn${zhSettings.showPinyin ? ' active' : ''}`}
-        onClick={() => onToggleZhSetting('showPinyin')}
-        title="显示/隐藏普通话拼音标注"
-      >
-        显示拼音
-      </button>
-    </div>
-  )
-
-  const renderEnControls = () => {
-    const labels = { en: '英文歌词', zh: '中文歌词' }
-    return (
-      <div className="workspace-controls en-controls">
-        <div className="toggle-group">
-          <button
-            className={`toggle-btn${enSettings.showChinese ? ' active' : ''}`}
-            onClick={() => onToggleEnSetting('showChinese')}
-            title="显示/隐藏中文歌词"
-          >
-            中文歌词
-          </button>
-          <button
-            className={`toggle-btn${enSettings.showEnglish ? ' active' : ''}`}
-            onClick={() => onToggleEnSetting('showEnglish')}
-            title="显示/隐藏英文歌词"
-          >
-            英文歌词
-          </button>
-        </div>
-        <div className="order-group">
-          <span className="order-label">显示顺序:</span>
-          {enSettings.lyricsOrder.map((lang, index) => (
-            <button
-              key={lang}
-              className={`order-btn draggable-btn${dragOverIdx === index ? ' drag-over' : ''}`}
-              draggable
-              onDragStart={(e) => handleDragStart(e, index)}
-              onDragOver={(e) => handleDragOver(e, index)}
-              onDrop={(e) => handleDrop(e, index, onReorderEnLyrics)}
-              onDragEnd={handleDragEnd}
-              title="拖拽调整歌词行顺序"
-            >
-              <span className="drag-handle">⣿</span>
-              <span>{labels[lang] || lang}</span>
-            </button>
-          ))}
-        </div>
-      </div>
-    )
-  }
-
-  const renderYueControls = () => {
-    const labels = { yue: '粤拼歌词', zh: '中文歌词' }
-    return (
-      <div className="workspace-controls yue-controls">
-        <button
-          className={`toggle-btn${yueSettings.showJyutping ? ' active' : ''}`}
-          onClick={() => onToggleYueSetting('showJyutping')}
-          title="显示/隐藏粤拼标注"
-        >
-          显示粤拼
-        </button>
-        <div className="order-group">
-          <span className="order-label">显示顺序:</span>
-          {yueSettings.lyricsOrder.map((lang, index) => (
-            <button
-              key={lang}
-              className={`order-btn draggable-btn${dragOverIdx === index ? ' drag-over' : ''}`}
-              draggable
-              onDragStart={(e) => handleDragStart(e, index)}
-              onDragOver={(e) => handleDragOver(e, index)}
-              onDrop={(e) => handleDrop(e, index, onReorderYueLyrics)}
-              onDragEnd={handleDragEnd}
-              title="拖拽调整歌词行顺序"
-            >
-              <span className="drag-handle">⣿</span>
-              <span>{labels[lang] || lang}</span>
-            </button>
-          ))}
-        </div>
-      </div>
-    )
-  }
-
   return (
     <div className="music-player">
       <audio ref={audioRef} src={musicFile} preload="auto" />
-
-      <div className="player-options">
-        {activeLang === 'zh' && renderZhControls()}
-        {activeLang === 'en' && renderEnControls()}
-        {activeLang === 'yue' && renderYueControls()}
-      </div>
-
       <div className="player-controls">
         <button className="play-btn" onClick={togglePlay} disabled={!musicFile}>
           {isPlaying ? '⏸' : '▶'}

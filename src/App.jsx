@@ -1,27 +1,22 @@
-import { useState, useCallback, useEffect, useRef } from 'react'
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react'
 import Sidebar from './components/Sidebar'
 import MusicPlayer from './components/MusicPlayer'
+import WorkspaceControls from './components/WorkspaceControls'
 import LyricsDisplay from './components/LyricsDisplay'
 import FloatingActionMenu from './components/FloatingActionMenu'
 import { parseLRC, findCurrentLyricIndex } from './utils/lrcParser'
-import { getHistory, addHistoryEntry, removeHistoryEntry, updateEntryLyrics, removeEntryLyrics, reorderHistory, SUPPORTED_LANGS, LANG_LABELS } from './utils/historyManager'
+import { getHistory, addHistoryEntry, removeHistoryEntry, updateEntryLyrics, removeEntryLyrics, reorderHistory } from './utils/historyManager'
 import { cacheAudio, getCachedAudio } from './utils/audioCache'
 import { generateJyutpingLyrics, generatePinyinLyrics } from './utils/phoneticDict'
+import { useAllWorkspaceSettings } from './utils/workspaceSettings'
+
+const DEFAULT_WORKSPACE = () => ({ musicFile: null, musicName: '', lyricsMap: {}, currentIndex: -1 })
 
 export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [activeLang, setActiveLang] = useState('zh')
 
-  const [zhSettings, setZhSettings] = useState(() => ({ showPinyin: false }))
-  const [enSettings, setEnSettings] = useState(() => ({
-    showChinese: true,
-    showEnglish: true,
-    lyricsOrder: ['en', 'zh'],
-  }))
-  const [yueSettings, setYueSettings] = useState(() => ({
-    showJyutping: true,
-    lyricsOrder: ['yue', 'zh'],
-  }))
+  const { settings: wsSettings, toggleSetting, reorderLyrics } = useAllWorkspaceSettings()
 
   const [musicFile, setMusicFile] = useState(null)
   const [musicName, setMusicName] = useState('')
@@ -39,65 +34,96 @@ export default function App() {
   const repeatTargetRef = useRef(-1)
   const audioUrlRef = useRef(null)
   const activeLangRef = useRef(activeLang)
+  const activeLyricsRef = useRef([])
 
   const workspacesRef = useRef({
-    zh: { musicFile: null, musicName: '', lyricsMap: {}, currentIndex: -1, zhSettings: { showPinyin: false } },
-    en: { musicFile: null, musicName: '', lyricsMap: {}, currentIndex: -1, enSettings: { showChinese: true, showEnglish: true, lyricsOrder: ['en', 'zh'] } },
-    yue: { musicFile: null, musicName: '', lyricsMap: {}, currentIndex: -1, yueSettings: { showJyutping: true, lyricsOrder: ['yue', 'zh'] } },
+    zh: DEFAULT_WORKSPACE(),
+    en: DEFAULT_WORKSPACE(),
+    yue: DEFAULT_WORKSPACE(),
+    ja: DEFAULT_WORKSPACE(),
   })
 
   const currentEntry = history.find((e) => e.musicName === musicName) || null
 
-  const { displayConfig, displayOrder } = (() => {
+  const { displayConfig, displayOrder } = useMemo(() => {
     if (activeLang === 'zh') {
-      const cfg = { zh: true, en: false, yue: false }
-      const order = zhSettings.showPinyin ? ['pinyin', 'zh'] : ['zh']
+      const cfg = { zh: true, en: false, yue: false, ja: false }
+      const order = wsSettings.zh.showPinyin ? ['pinyin', 'zh'] : ['zh']
       return { displayConfig: cfg, displayOrder: order }
     }
     if (activeLang === 'en') {
-      const cfg = { zh: enSettings.showChinese, en: enSettings.showEnglish, yue: false }
-      const order = enSettings.lyricsOrder.filter(l => cfg[l])
+      const cfg = { zh: wsSettings.en.showChinese, en: wsSettings.en.showEnglish, yue: false, ja: false }
+      const order = wsSettings.en.lyricsOrder.filter((l) => cfg[l])
       return { displayConfig: cfg, displayOrder: order }
     }
     if (activeLang === 'yue') {
-      const cfg = { zh: true, en: false, yue: yueSettings.showJyutping }
-      const order = yueSettings.lyricsOrder.filter(l => cfg[l])
+      const cfg = { zh: true, en: false, yue: wsSettings.yue.showJyutping, ja: false }
+      const order = wsSettings.yue.lyricsOrder.filter((l) => cfg[l])
+      return { displayConfig: cfg, displayOrder: order }
+    }
+    if (activeLang === 'ja') {
+      const cfg = { zh: wsSettings.ja.showChinese, en: false, yue: false, ja: wsSettings.ja.showJapanese }
+      const order = wsSettings.ja.lyricsOrder.filter((l) => cfg[l])
       return { displayConfig: cfg, displayOrder: order }
     }
     return { displayConfig: {}, displayOrder: [] }
-  })()
+  }, [activeLang, wsSettings])
 
-  const enabledLangs = displayOrder.filter(l => l === 'pinyin' || displayConfig[l])
+  const enabledLangs = useMemo(
+    () => displayOrder.filter((l) => l === 'pinyin' || displayConfig[l]),
+    [displayOrder, displayConfig]
+  )
 
-  const activeLyrics = (() => {
+  const activeLyrics = useMemo(() => {
     for (const lang of enabledLangs) {
       if (lang === 'pinyin') continue
       if (lyricsMap[lang]?.length > 0) return lyricsMap[lang]
     }
     return []
-  })()
+  }, [enabledLangs, lyricsMap])
+
+  useEffect(() => { activeLyricsRef.current = activeLyrics }, [activeLyrics])
+
+  const pinyinLyrics = useMemo(() => {
+    if (activeLang === 'zh' && wsSettings.zh.showPinyin && lyricsMap.zh?.length > 0) {
+      return generatePinyinLyrics(lyricsMap.zh)
+    }
+    return null
+  }, [activeLang, wsSettings.zh.showPinyin, lyricsMap.zh])
+
+  const currentLyricsName = useMemo(() => {
+    if (!currentEntry?.lyrics) return ''
+    const names = []
+    for (const lang of enabledLangs) {
+      if (lang === 'pinyin') continue
+      if (currentEntry.lyrics[lang]?.name) {
+        names.push(currentEntry.lyrics[lang].name)
+      }
+    }
+    return names.length > 0 ? names.join(' + ') : ''
+  }, [currentEntry, enabledLangs])
 
   const handleSwitchLang = useCallback((newLang) => {
     if (newLang === activeLang) return
     if (isPlaying) playerRef.current?.togglePlay()
 
-    workspacesRef.current[activeLang] = {
-      musicFile, musicName, lyricsMap, currentIndex,
-      zhSettings, enSettings, yueSettings,
-    }
-
-    if (newLang === 'yue' && !workspacesRef.current.yue.lyricsMap.zh && lyricsMap.zh?.length > 0) {
-      workspacesRef.current.yue.lyricsMap = { ...workspacesRef.current.yue.lyricsMap, zh: lyricsMap.zh }
-    }
+    workspacesRef.current[activeLang] = { musicFile, musicName, lyricsMap, currentIndex }
 
     const snap = workspacesRef.current[newLang]
+    let nextLyricsMap = { ...snap.lyricsMap }
+
+    if (newLang === 'yue' && !snap.lyricsMap.zh && lyricsMap.zh?.length > 0) {
+      nextLyricsMap = { ...nextLyricsMap, zh: lyricsMap.zh }
+    } else if (newLang === 'ja' && !snap.lyricsMap.ja && lyricsMap.ja?.length > 0) {
+      nextLyricsMap = { ...nextLyricsMap, ja: lyricsMap.ja, zh: lyricsMap.zh || snap.lyricsMap.zh }
+    }
+
+    workspacesRef.current[newLang] = { ...snap, lyricsMap: nextLyricsMap }
+
     setMusicFile(snap.musicFile)
     setMusicName(snap.musicName)
-    setLyricsMap(snap.lyricsMap)
+    setLyricsMap(nextLyricsMap)
     setCurrentIndex(snap.currentIndex)
-    setZhSettings(snap.zhSettings)
-    setEnSettings(snap.enSettings)
-    setYueSettings(snap.yueSettings)
     setHistory(getHistory(newLang))
     setCurrentTime(0)
     repeatTargetRef.current = -1
@@ -105,76 +131,15 @@ export default function App() {
     setSingleRepeat(false)
 
     setActiveLang(newLang)
-  }, [activeLang, musicFile, musicName, lyricsMap, currentIndex, zhSettings, enSettings, yueSettings, isPlaying])
-
-  const handleToggleZhSetting = useCallback((key) => {
-    setZhSettings(prev => ({ ...prev, [key]: !prev[key] }))
-  }, [])
-
-  const handleToggleEnSetting = useCallback((key) => {
-    setEnSettings(prev => {
-      const next = { ...prev, [key]: !prev[key] }
-      if (key === 'showChinese' || key === 'showEnglish') {
-        const hasVisible = next.showChinese || next.showEnglish
-        if (!hasVisible) return prev
-        if (!next[key]) {
-          next.lyricsOrder = next.lyricsOrder.filter(l => l !== (key === 'showChinese' ? 'zh' : 'en'))
-        } else {
-          const lang = key === 'showChinese' ? 'zh' : 'en'
-          if (!next.lyricsOrder.includes(lang)) {
-            next.lyricsOrder = [...next.lyricsOrder, lang]
-          }
-        }
-      }
-      return next
-    })
-  }, [])
-
-  const handleReorderEnLyrics = useCallback((fromIndex, toIndex) => {
-    setEnSettings(prev => {
-      const next = [...prev.lyricsOrder]
-      const [moved] = next.splice(fromIndex, 1)
-      next.splice(toIndex, 0, moved)
-      return { ...prev, lyricsOrder: next }
-    })
-  }, [])
-
-  const handleToggleYueSetting = useCallback((key) => {
-    setYueSettings(prev => {
-      const next = { ...prev, [key]: !prev[key] }
-      if (key === 'showJyutping') {
-        if (!next.showJyutping) {
-          next.lyricsOrder = next.lyricsOrder.filter(l => l !== 'yue')
-        } else {
-          if (!next.lyricsOrder.includes('yue')) {
-            next.lyricsOrder = ['yue', ...next.lyricsOrder]
-          }
-        }
-      }
-      return next
-    })
-  }, [])
-
-  const handleReorderYueLyrics = useCallback((fromIndex, toIndex) => {
-    setYueSettings(prev => {
-      const next = [...prev.lyricsOrder]
-      const [moved] = next.splice(fromIndex, 1)
-      next.splice(toIndex, 0, moved)
-      return { ...prev, lyricsOrder: next }
-    })
-  }, [])
+  }, [activeLang, musicFile, musicName, lyricsMap, currentIndex, isPlaying])
 
   const handleToggleSingleRepeat = useCallback(() => {
-    setSingleRepeat(prev => {
+    setSingleRepeat((prev) => {
       singleRepeatRef.current = !prev
       if (prev) repeatTargetRef.current = -1
       return !prev
     })
   }, [])
-
-  useEffect(() => {
-    repeatTargetRef.current = -1
-  }, [lyricsMap])
 
   useEffect(() => {
     activeLangRef.current = activeLang
@@ -183,34 +148,12 @@ export default function App() {
   useEffect(() => {
     if (lyricsMap.zh?.length > 0) {
       const jyutpingLyrics = generateJyutpingLyrics(lyricsMap.zh)
-      setLyricsMap(prev => {
+      setLyricsMap((prev) => {
         if (JSON.stringify(prev.yue) === JSON.stringify(jyutpingLyrics)) return prev
         return { ...prev, yue: jyutpingLyrics }
       })
     }
   }, [lyricsMap.zh])
-
-  const pinyinLyrics = (() => {
-    if (activeLang === 'zh' && zhSettings.showPinyin && lyricsMap.zh?.length > 0) {
-      return generatePinyinLyrics(lyricsMap.zh)
-    }
-    return null
-  })()
-
-  const saveHistory = useCallback(() => {
-    if (!musicName) return
-    const lyrics = {}
-    for (const [lang, parsed] of Object.entries(lyricsMap)) {
-      if (activeLang === 'yue' && lang === 'yue') continue
-      const entry = currentEntry
-      lyrics[lang] = {
-        name: entry?.lyrics?.[lang]?.name || '',
-        text: parsed.length > 0 ? (entry?.lyrics?.[lang]?.text || '') : '',
-      }
-    }
-    const updated = addHistoryEntry(activeLang, musicName, '', lyrics)
-    setHistory(updated)
-  }, [musicName, lyricsMap, activeLang, currentEntry])
 
   const handleMusicSelect = useCallback((file) => {
     if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current)
@@ -228,9 +171,9 @@ export default function App() {
       const parsed = parseLRC(text)
       if (activeLang === 'yue') {
         const jyutpingLyrics = generateJyutpingLyrics(parsed)
-        setLyricsMap(prev => ({ ...prev, zh: parsed, yue: jyutpingLyrics }))
+        setLyricsMap((prev) => ({ ...prev, zh: parsed, yue: jyutpingLyrics }))
       } else {
-        setLyricsMap(prev => ({ ...prev, [lang]: parsed }))
+        setLyricsMap((prev) => ({ ...prev, [lang]: parsed }))
       }
     } catch (err) {
       console.error('Failed to load lyrics:', err)
@@ -257,8 +200,6 @@ export default function App() {
     const lang = activeLangRef.current
     if (lang === 'yue' && parsedMap.zh) {
       parsedMap.yue = generateJyutpingLyrics(parsedMap.zh)
-    } else if (lang === 'zh' && parsedMap.zh) {
-      parsedMap.pinyin = null
     }
     setLyricsMap(parsedMap)
     setCurrentIndex(-1)
@@ -291,17 +232,18 @@ export default function App() {
   const handleAddLyricsToEntry = useCallback(async (entry, lang, file) => {
     try {
       const text = await file.text()
-      const parsed = parseLRC(text)
       const storeLang = activeLang === 'yue' ? 'zh' : lang
       const updated = updateEntryLyrics(activeLang, entry.id, storeLang, file.name, text)
       setHistory(updated)
 
       if (entry.musicName === musicName) {
         if (activeLang === 'yue') {
+          const parsed = parseLRC(text)
           const jyutpingLyrics = generateJyutpingLyrics(parsed)
-          setLyricsMap(prev => ({ ...prev, zh: parsed, yue: jyutpingLyrics }))
+          setLyricsMap((prev) => ({ ...prev, zh: parsed, yue: jyutpingLyrics }))
         } else {
-          setLyricsMap(prev => ({ ...prev, [lang]: parsed }))
+          const parsed = parseLRC(text)
+          setLyricsMap((prev) => ({ ...prev, [lang]: parsed }))
         }
       }
     } catch (err) {
@@ -313,7 +255,7 @@ export default function App() {
     const updated = removeEntryLyrics(activeLang, id, lang)
     setHistory(updated)
     if (currentEntry?.id === id) {
-      setLyricsMap(prev => {
+      setLyricsMap((prev) => {
         const next = { ...prev }
         delete next[lang]
         return next
@@ -323,58 +265,68 @@ export default function App() {
 
   const handleTimeUpdate = useCallback((time) => {
     setCurrentTime(time)
-    if (activeLyrics.length > 0) {
-      const idx = findCurrentLyricIndex(activeLyrics, time)
-
-      if (singleRepeatRef.current) {
-        if (repeatTargetRef.current < 0 || repeatTargetRef.current >= activeLyrics.length) {
-          repeatTargetRef.current = idx
-        }
-        if (idx !== repeatTargetRef.current) {
-          setCurrentIndex(repeatTargetRef.current)
-          playerRef.current?.seekTo(activeLyrics[repeatTargetRef.current].time)
-          return
-        }
-      }
-
-      setCurrentIndex(idx)
-    } else {
+    const lyrics = activeLyricsRef.current
+    if (lyrics.length === 0) {
       repeatTargetRef.current = -1
       setCurrentIndex(-1)
+      return
     }
-  }, [activeLyrics])
+    const idx = findCurrentLyricIndex(lyrics, time)
+
+    if (singleRepeatRef.current) {
+      if (repeatTargetRef.current < 0 || repeatTargetRef.current >= lyrics.length) {
+        repeatTargetRef.current = idx < 0 ? 0 : idx
+      }
+      if (idx !== repeatTargetRef.current && !seekLockRef.current) {
+        const target = repeatTargetRef.current
+        setCurrentIndex(target)
+        seekLockRef.current = true
+        playerRef.current?.seekTo(lyrics[target]?.time ?? 0)
+        window.setTimeout(() => { seekLockRef.current = false }, 200)
+        return
+      }
+    }
+
+    setCurrentIndex(idx < 0 ? -1 : idx)
+  }, [])
 
   const handleTogglePlay = useCallback(() => {
     playerRef.current?.togglePlay()
   }, [])
 
   const handlePrevLyric = useCallback(() => {
-    if (activeLyrics.length === 0) return
-    const target = currentIndex > 0 ? currentIndex - 1 : 0
+    const lyrics = activeLyricsRef.current
+    if (lyrics.length === 0) return
+    const cur = currentIndex < 0 ? 0 : currentIndex
+    const target = cur > 0 ? cur - 1 : 0
     if (singleRepeatRef.current) repeatTargetRef.current = target
-    playerRef.current?.seekTo(activeLyrics[target].time)
-  }, [activeLyrics, currentIndex])
+    playerRef.current?.seekTo(lyrics[target].time)
+  }, [currentIndex])
 
   const handleNextLyric = useCallback(() => {
-    if (activeLyrics.length === 0) return
-    const target = currentIndex < activeLyrics.length - 1 ? currentIndex + 1 : activeLyrics.length - 1
+    const lyrics = activeLyricsRef.current
+    if (lyrics.length === 0) return
+    const cur = currentIndex < 0 ? 0 : currentIndex
+    const target = cur < lyrics.length - 1 ? cur + 1 : lyrics.length - 1
     if (singleRepeatRef.current) repeatTargetRef.current = target
-    playerRef.current?.seekTo(activeLyrics[target].time)
-  }, [activeLyrics, currentIndex])
+    playerRef.current?.seekTo(lyrics[target].time)
+  }, [currentIndex])
 
   const handleSeekFromBar = useCallback((time) => {
-    if (singleRepeatRef.current && activeLyrics.length > 0) {
-      repeatTargetRef.current = findCurrentLyricIndex(activeLyrics, time)
+    const lyrics = activeLyricsRef.current
+    if (singleRepeatRef.current && lyrics.length > 0) {
+      repeatTargetRef.current = findCurrentLyricIndex(lyrics, time)
     }
-  }, [activeLyrics])
+  }, [])
 
   const handleSeekToLine = useCallback((index) => {
-    if (activeLyrics.length === 0 || index < 0 || index >= activeLyrics.length) return
+    const lyrics = activeLyricsRef.current
+    if (lyrics.length === 0 || index < 0 || index >= lyrics.length) return
     if (singleRepeatRef.current) repeatTargetRef.current = index
-    playerRef.current?.seekTo(activeLyrics[index].time)
-  }, [activeLyrics])
+    playerRef.current?.seekTo(lyrics[index].time)
+  }, [])
 
-  const handleReorder = useCallback((fromIndex, toIndex) => {
+  const handleReorderHistory = useCallback((fromIndex, toIndex) => {
     const updated = reorderHistory(activeLang, fromIndex, toIndex)
     setHistory(updated)
   }, [activeLang])
@@ -393,18 +345,6 @@ export default function App() {
     }
   }, [isPlaying])
 
-  const currentLyricsName = (() => {
-    if (!currentEntry?.lyrics) return ''
-    const names = []
-    for (const lang of enabledLangs) {
-      if (lang === 'pinyin') continue
-      if (currentEntry.lyrics[lang]?.name) {
-        names.push(currentEntry.lyrics[lang].name)
-      }
-    }
-    return names.length > 0 ? names.join(' + ') : ''
-  })()
-
   return (
     <div className="app">
       <Sidebar
@@ -420,7 +360,7 @@ export default function App() {
         onMusicSelect={handleMusicSelect}
         onAddLyricsToEntry={handleAddLyricsToEntry}
         onRemoveLyricsFromEntry={handleRemoveLyricsFromEntry}
-        onReorder={handleReorder}
+        onReorder={handleReorderHistory}
       />
 
       <main className={`main-content ${sidebarOpen ? 'sidebar-open' : ''}`}>
@@ -458,15 +398,13 @@ export default function App() {
           onAutoPlayHandled={() => setAutoPlay(false)}
           onPlayingChange={setIsPlaying}
           onSeek={handleSeekFromBar}
+        />
+
+        <WorkspaceControls
           activeLang={activeLang}
-          zhSettings={zhSettings}
-          onToggleZhSetting={handleToggleZhSetting}
-          enSettings={enSettings}
-          onToggleEnSetting={handleToggleEnSetting}
-          onReorderEnLyrics={handleReorderEnLyrics}
-          yueSettings={yueSettings}
-          onToggleYueSetting={handleToggleYueSetting}
-          onReorderYueLyrics={handleReorderYueLyrics}
+          settings={wsSettings}
+          onToggleSetting={toggleSetting}
+          onReorderLyrics={reorderLyrics}
         />
 
         <FloatingActionMenu items={[
