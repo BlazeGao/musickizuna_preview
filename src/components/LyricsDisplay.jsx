@@ -114,8 +114,9 @@ export default function LyricsDisplay({ lyricsMap, displayConfig, displayOrder, 
   const [ttsLoading, setTtsLoading] = useState(null)
   const [editPopover, setEditPopover] = useState(null)
 
-  const ttsLang = 'zh'
-  const showTts = activeLang === 'yue'
+  const jaLyrics = lyricsMap.ja || []
+  const ttsLang = activeLang === 'ja' && jaLyrics.length > 0 ? 'ja' : 'zh'
+  const showTts = activeLang === 'yue' || (activeLang === 'ja' && jaLyrics.length > 0)
 
   useEffect(() => {
     const container = containerRef.current
@@ -231,7 +232,6 @@ export default function LyricsDisplay({ lyricsMap, displayConfig, displayOrder, 
     return renderTTSButtons(index, text, ttsLoading, handleReadLyric, handleStopTTS)
   }, [showTts, hoveredIndex, ttsLoading, handleReadLyric, handleStopTTS])
 
-  const jaLyrics = lyricsMap.ja || []
   const zhLyricsForJa = useMemo(() => {
     const zh = lyricsMap.zh || []
     if (jaLyrics.length === 0 || zh.length === 0) return new Map()
@@ -404,9 +404,9 @@ export default function LyricsDisplay({ lyricsMap, displayConfig, displayOrder, 
                 onLeave={hoverOff}
                 onSeek={onSeek}
                 seekEnabled
-                showTts={false}
+                showTts={showTts}
                 ttsText={line.text}
-                ttsLoading={false}
+                ttsLoading={ttsLoading && hoveredIndex === index}
                 onReadLyric={handleReadLyric}
                 onStopTTS={handleStopTTS}
                 subLines={subLines}

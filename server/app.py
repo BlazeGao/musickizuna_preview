@@ -103,7 +103,7 @@ def tts():
     voice = 'Kiki'
     language_type = 'Chinese'
     if lang == 'ja':
-        voice = 'Ono_Anna'
+        voice = 'Ono Anna'
         language_type = 'Japanese'
 
     try:
