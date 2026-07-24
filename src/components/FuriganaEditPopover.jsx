@@ -31,11 +31,11 @@ export default function FuriganaEditPopover({ popover, onSave, onRemove, onClose
     e?.preventDefault?.()
     const trimmed = reading.trim()
     if (!trimmed) return
-    onSave(trimmed, scope)
+    onSave(trimmed, scope, popover.surface)
   }
 
   const handleReset = () => {
-    onRemove()
+    onRemove(popover.surface)
   }
 
   return (

@@ -107,9 +107,43 @@ export function removeFuriganaOverride(songName, key) {
   }
 }
 
-export function makeOverrideKey(lineIndex, charIndex, scope = 'local') {
-  const linePart = scope === 'all' ? '*' : lineIndex
-  return `${linePart}-${charIndex}`
+export function makeOverrideKey(lineIndex, charIndex, surface, scope = 'local') {
+  if (scope === 'all' && surface) return `c-${surface}`
+  return `${lineIndex}-${charIndex}`
+}
+
+function formatLRCTime(time) {
+  const mins = Math.floor(time / 60)
+  const secs = time % 60
+  return `${String(mins).padStart(2, '0')}:${secs.toFixed(2).padStart(5, '0')}`
+}
+
+export function exportFuriganaLRC(jaLyrics, furiganaTokens, overrides) {
+  if (!jaLyrics || jaLyrics.length === 0) return ''
+  const out = []
+  for (let i = 0; i < jaLyrics.length; i++) {
+    const line = jaLyrics[i]
+    const tokens = (furiganaTokens && furiganaTokens[i]) || []
+    const segments = buildRubySegments(line.text, tokens, i, overrides || {})
+    const text = segments.map((seg) => {
+      if (seg.type === 'ruby') return `${seg.value}《${seg.reading}》`
+      return seg.value
+    }).join('')
+    out.push(`[${formatLRCTime(line.time)}]${text}`)
+  }
+  return out.join('\n') + '\n'
+}
+
+export function downloadTextFile(text, filename) {
+  const blob = new Blob([text], { type: 'text/plain;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  setTimeout(() => URL.revokeObjectURL(url), 0)
 }
 
 export async function fetchFuriganaBatch(texts) {
@@ -263,8 +297,8 @@ export function buildRubySegments(text, tokens, lineIndex, overrides) {
         for (const s of sub) {
           if (s.type === 'ruby') {
             const localKey = `${lineIndex}-${segChar}`
-            const wildKey = `*-${segChar}`
-            const overrideReading = ov[localKey] || ov[wildKey]
+            const charKey = `c-${s.value}`
+            const overrideReading = ov[localKey] || ov[charKey]
             segments.push({
               type: 'ruby',
               value: s.value,

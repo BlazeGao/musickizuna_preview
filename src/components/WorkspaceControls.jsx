@@ -8,7 +8,7 @@ const LANG_LABELS = {
   ja: '日文歌词',
 }
 
-function WorkspaceControls({ activeLang, settings, onToggleSetting, onReorderLyrics }) {
+function WorkspaceControls({ activeLang, settings, onToggleSetting, onReorderLyrics, onExportFuriganaLRC }) {
   const dragIndexRef = useRef(null)
   const dragOverIndexRef = useRef(null)
   const [dragOverIdx, setDragOverIdx] = useState(null)
@@ -146,6 +146,16 @@ function WorkspaceControls({ activeLang, settings, onToggleSetting, onReorderLyr
           </button>
         </div>
         {renderOrderGroup(settings.ja.lyricsOrder)}
+        {onExportFuriganaLRC && (
+          <button
+            className="toggle-btn export-btn"
+            onClick={onExportFuriganaLRC}
+            title="导出含振假名的 LRC 文件"
+          >
+            <span className="export-icon">📥</span>
+            <span>导出歌词</span>
+          </button>
+        )}
       </div>
     )
   }

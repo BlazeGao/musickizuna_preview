@@ -48,7 +48,7 @@ const ICONS = {
 
 export default function FloatingActionMenu({ items = [] }) {
   const [open, setOpen] = useState(false)
-  const [pos, setPos] = useState({ bottom: 32, right: 32 })
+  const [pos, setPos] = useState({ bottom: 96, right: 32 })
   const posRef = useRef(pos)
   useEffect(() => { posRef.current = pos }, [pos])
   const dragRef = useRef({ dragging: false, startX: 0, startY: 0, startBottom: 0, startRight: 0, moved: false })

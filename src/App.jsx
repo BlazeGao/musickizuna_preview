@@ -4,10 +4,12 @@ import MusicPlayer from './components/MusicPlayer'
 import WorkspaceControls from './components/WorkspaceControls'
 import LyricsDisplay from './components/LyricsDisplay'
 import FloatingActionMenu from './components/FloatingActionMenu'
+import FuriganaExportModal from './components/FuriganaExportModal'
 import { parseLRC, findCurrentLyricIndex } from './utils/lrcParser'
 import { getHistory, addHistoryEntry, removeHistoryEntry, updateEntryLyrics, removeEntryLyrics, reorderHistory } from './utils/historyManager'
 import { cacheAudio, getCachedAudio } from './utils/audioCache'
-import { generateJyutpingLyrics, generatePinyinLyrics, fetchFuriganaBatch, getCachedFurigana, getFuriganaOverrides, setFuriganaOverride, removeFuriganaOverride } from './utils/phoneticDict'
+import { generateJyutpingLyrics, generatePinyinLyrics, fetchFuriganaBatch, getCachedFurigana, getFuriganaOverrides, setFuriganaOverride, removeFuriganaOverride, exportFuriganaLRC, downloadTextFile } from './utils/phoneticDict'
+import { exportFuriganaToPDF } from './utils/pdfExport'
 import { useAllWorkspaceSettings } from './utils/workspaceSettings'
 
 const DEFAULT_WORKSPACE = () => ({ musicFile: null, musicName: '', lyricsMap: {}, currentIndex: -1 })
@@ -30,6 +32,7 @@ export default function App() {
   const [autoPlay, setAutoPlay] = useState(false)
   const [isPlaying, setIsPlaying] = useState(false)
   const [singleRepeat, setSingleRepeat] = useState(false)
+  const [exportModal, setExportModal] = useState(null)
 
   const playerRef = useRef(null)
   const seekLockRef = useRef(false)
@@ -193,15 +196,15 @@ export default function App() {
     }
   }, [musicName])
 
-  const handleSaveFuriganaOverride = useCallback((lineIndex, charIndex, reading, scope) => {
+  const handleSaveFuriganaOverride = useCallback((lineIndex, charIndex, surface, reading, scope) => {
     if (!musicName) return
-    const wild = `*-${charIndex}`
     const local = `${lineIndex}-${charIndex}`
-    if (scope === 'all') {
+    const charKey = surface ? `c-${surface}` : null
+    if (scope === 'all' && charKey) {
       setFuriganaOverride(musicName, local, null)
-      setFuriganaOverride(musicName, wild, reading)
+      setFuriganaOverride(musicName, charKey, reading)
     } else {
-      setFuriganaOverride(musicName, wild, null)
+      if (charKey) setFuriganaOverride(musicName, charKey, null)
       setFuriganaOverride(musicName, local, reading)
     }
     const updated = getFuriganaOverrides(musicName)
@@ -213,10 +216,10 @@ export default function App() {
     }
   }, [musicName, activeLang])
 
-  const handleRemoveFuriganaOverride = useCallback((lineIndex, charIndex) => {
+  const handleRemoveFuriganaOverride = useCallback((lineIndex, charIndex, surface) => {
     if (!musicName) return
     removeFuriganaOverride(musicName, `${lineIndex}-${charIndex}`)
-    removeFuriganaOverride(musicName, `*-${charIndex}`)
+    if (surface) removeFuriganaOverride(musicName, `c-${surface}`)
     const updated = getFuriganaOverrides(musicName)
     setFuriganaOverrides(updated)
     setOverridesVersion((v) => v + 1)
@@ -225,6 +228,44 @@ export default function App() {
       furiganaOverrides: updated,
     }
   }, [musicName, activeLang])
+
+  const handleExportFuriganaLRC = useCallback(() => {
+    if (!musicName) return
+    const jaLyrics = lyricsMap.ja || []
+    if (jaLyrics.length === 0) return
+    const tokens = furiganaMap?.ja || []
+    const lrc = exportFuriganaLRC(jaLyrics, tokens, furiganaOverrides)
+    if (!lrc) return
+    const baseName = musicName.replace(/\.[^/.]+$/, '')
+    setExportModal({
+      filename: `${baseName}_furigana.txt`,
+      pdfFilename: `${baseName}_furigana.pdf`,
+      lrcText: lrc,
+      lineCount: jaLyrics.length,
+    })
+  }, [musicName, lyricsMap.ja, furiganaMap, furiganaOverrides])
+
+  const handleDownloadFromModal = useCallback(async (view) => {
+    if (!exportModal) return
+    if (view === 'lrc') {
+      downloadTextFile(exportModal.lrcText, exportModal.filename)
+    } else {
+      const node = document.querySelector('.furigana-view-content')
+      if (!node) return
+      try {
+        await exportFuriganaToPDF(node, exportModal.pdfFilename)
+      } catch (err) {
+        console.error('PDF export failed:', err)
+        alert('PDF 生成失败: ' + err.message)
+        return
+      }
+    }
+    setExportModal(null)
+  }, [exportModal])
+
+  const handleCloseExportModal = useCallback(() => {
+    setExportModal(null)
+  }, [])
 
   const handleMusicSelect = useCallback((file) => {
     if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current)
@@ -468,6 +509,14 @@ export default function App() {
           onRemoveFuriganaOverride={handleRemoveFuriganaOverride}
         />
 
+        <WorkspaceControls
+          activeLang={activeLang}
+          settings={wsSettings}
+          onToggleSetting={toggleSetting}
+          onReorderLyrics={reorderLyrics}
+          onExportFuriganaLRC={handleExportFuriganaLRC}
+        />
+
         <MusicPlayer
           ref={playerRef}
           musicFile={musicFile}
@@ -478,13 +527,6 @@ export default function App() {
           onSeek={handleSeekFromBar}
         />
 
-        <WorkspaceControls
-          activeLang={activeLang}
-          settings={wsSettings}
-          onToggleSetting={toggleSetting}
-          onReorderLyrics={reorderLyrics}
-        />
-
         <FloatingActionMenu items={[
           { icon: '▼', label: '下一句', onClick: handleNextLyric },
           { icon: isPlaying ? '⏸' : '▶', label: isPlaying ? '暂停' : '播放', onClick: handleTogglePlay, active: isPlaying },
@@ -492,6 +534,18 @@ export default function App() {
           { icon: '▲', label: '上一句', onClick: handlePrevLyric },
         ]} />
       </main>
+
+      <FuriganaExportModal
+        open={!!exportModal}
+        filename={exportModal?.filename || ''}
+        lrcText={exportModal?.lrcText || ''}
+        lineCount={exportModal?.lineCount || 0}
+        jaLyrics={lyricsMap.ja || []}
+        furiganaTokens={furiganaMap?.ja || []}
+        furiganaOverrides={furiganaOverrides}
+        onDownload={handleDownloadFromModal}
+        onClose={handleCloseExportModal}
+      />
     </div>
   )
 }

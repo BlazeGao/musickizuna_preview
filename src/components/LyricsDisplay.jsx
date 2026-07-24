@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, memo } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo, memo } from 'react'
 import { fetchPhonetic, buildRubySegments } from '../utils/phoneticDict'
 import { readLyric, stopCurrentAudio } from '../utils/tts'
 import FuriganaEditPopover from './FuriganaEditPopover'
@@ -231,6 +231,17 @@ export default function LyricsDisplay({ lyricsMap, displayConfig, displayOrder, 
     return renderTTSButtons(index, text, ttsLoading, handleReadLyric, handleStopTTS)
   }, [showTts, hoveredIndex, ttsLoading, handleReadLyric, handleStopTTS])
 
+  const jaLyrics = lyricsMap.ja || []
+  const zhLyricsForJa = useMemo(() => {
+    const zh = lyricsMap.zh || []
+    if (jaLyrics.length === 0 || zh.length === 0) return new Map()
+    const m = new Map()
+    for (const z of zh) {
+      if (!m.has(z.time)) m.set(z.time, z)
+    }
+    return m
+  }, [jaLyrics, lyricsMap.zh])
+
   const hasAnyLyrics = Object.keys(lyricsMap).some((lang) => lyricsMap[lang]?.length > 0)
 
   if (!hasAnyLyrics) {
@@ -356,7 +367,6 @@ export default function LyricsDisplay({ lyricsMap, displayConfig, displayOrder, 
   }
 
   if (hasJapanese) {
-    const jaLyrics = lyricsMap.ja || []
     const zhLyrics = enabledLangs.includes('zh') ? (lyricsMap.zh || []) : []
     const hasZh = zhLyrics.length > 0
     const renderFurigana = !!showFurigana && (furiganaMap?.ja?.length ?? 0) > 0
@@ -381,7 +391,8 @@ export default function LyricsDisplay({ lyricsMap, displayConfig, displayOrder, 
               })
             }
             if (hasZh) {
-              subLines.push({ className: 'chinese-line', content: zhLyrics[index]?.text || '' })
+              const zhLine = jaLine ? zhLyricsForJa.get(jaLine.time) : zhLyrics[index]
+              subLines.push({ className: 'chinese-line', content: zhLine?.text || '' })
             }
             return (
               <LyricLineGroup
@@ -406,12 +417,12 @@ export default function LyricsDisplay({ lyricsMap, displayConfig, displayOrder, 
         {editPopover && onSaveFuriganaOverride && (
           <FuriganaEditPopover
             popover={editPopover}
-            onSave={(reading, scope) => {
-              onSaveFuriganaOverride(editPopover.lineIndex, editPopover.charIndex, reading, scope)
+            onSave={(reading, scope, surface) => {
+              onSaveFuriganaOverride(editPopover.lineIndex, editPopover.charIndex, surface, reading, scope)
               setEditPopover(null)
             }}
-            onRemove={() => {
-              onRemoveFuriganaOverride && onRemoveFuriganaOverride(editPopover.lineIndex, editPopover.charIndex)
+            onRemove={(surface) => {
+              onRemoveFuriganaOverride && onRemoveFuriganaOverride(editPopover.lineIndex, editPopover.charIndex, surface)
               setEditPopover(null)
             }}
             onClose={closeEditPopover}
