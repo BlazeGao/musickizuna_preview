@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useMemo } from 'react'
 import { buildRubySegments } from '../utils/phoneticDict'
+import { THEME_PRESETS, FONT_COLORS, RUBY_COLORS, DEFAULT_THEME } from '../utils/themePresets'
 import './FuriganaExportModal.css'
 
 function renderFuriganaLine(text, tokens, lineIndex, overrides) {
@@ -20,6 +21,9 @@ export default function FuriganaExportModal({ open, filename, lrcText, lineCount
   const textareaRef = useRef(null)
   const furiganaRef = useRef(null)
   const [view, setView] = useState('lrc')
+  const [themeKey, setThemeKey] = useState(DEFAULT_THEME)
+  const [fontColor, setFontColor] = useState(THEME_PRESETS[DEFAULT_THEME].fontDefault)
+  const [rubyColor, setRubyColor] = useState(THEME_PRESETS[DEFAULT_THEME].rubyDefault)
 
   useEffect(() => {
     if (!open) return
@@ -39,6 +43,10 @@ export default function FuriganaExportModal({ open, filename, lrcText, lineCount
     }
     if (open) {
       setView('lrc')
+      const t = THEME_PRESETS[DEFAULT_THEME]
+      setThemeKey(DEFAULT_THEME)
+      setFontColor(t.fontDefault)
+      setRubyColor(t.rubyDefault)
     }
   }, [open])
 
@@ -47,6 +55,20 @@ export default function FuriganaExportModal({ open, filename, lrcText, lineCount
       furiganaRef.current.scrollTop = 0
     }
   }, [open, view])
+
+  const handleSelectTheme = (key) => {
+    setThemeKey(key)
+    const t = THEME_PRESETS[key]
+    setFontColor(t.fontDefault)
+    setRubyColor(t.rubyDefault)
+  }
+
+  const handleResetStyle = () => {
+    const t = THEME_PRESETS[DEFAULT_THEME]
+    setThemeKey(DEFAULT_THEME)
+    setFontColor(t.fontDefault)
+    setRubyColor(t.rubyDefault)
+  }
 
   const furiganaLines = useMemo(() => {
     if (!jaLyrics || jaLyrics.length === 0) return []
@@ -58,6 +80,7 @@ export default function FuriganaExportModal({ open, filename, lrcText, lineCount
 
   if (!open) return null
 
+  const theme = THEME_PRESETS[themeKey]
   const handleDownloadClick = () => {
     onDownload?.(view)
   }
@@ -91,16 +114,87 @@ export default function FuriganaExportModal({ open, filename, lrcText, lineCount
             onClick={(e) => e.target.select()}
           />
         ) : (
-          <div ref={furiganaRef} className="furigana-view-content">
-            {furiganaLines.map((line) => (
-              <div key={line.key} className="furigana-view-line">
-                {line.content}
+          <>
+            <div className="furigana-style-bar">
+              <div className="furigana-style-row">
+                <span className="furigana-style-label">背景</span>
+                <div className="furigana-style-swatches">
+                  {Object.entries(THEME_PRESETS).map(([key, t]) => (
+                    <button
+                      key={key}
+                      className={`furigana-bg-swatch${themeKey === key ? ' active' : ''}`}
+                      style={{ background: t.bg, color: t.ruby, borderColor: t.ruby }}
+                      onClick={() => handleSelectTheme(key)}
+                      title={`${t.label} · ${t.desc}`}
+                      type="button"
+                    >
+                      <span className="furigana-bg-swatch-char" style={{ color: t.fontDefault }}>あ</span>
+                    </button>
+                  ))}
+                </div>
               </div>
-            ))}
-          </div>
+              <div className="furigana-style-row">
+                <span className="furigana-style-label">歌词</span>
+                <div className="furigana-style-swatches">
+                  {FONT_COLORS.map((c) => (
+                    <button
+                      key={c.value}
+                      className={`furigana-color-swatch${fontColor === c.value ? ' active' : ''}`}
+                      style={{ background: c.value }}
+                      onClick={() => setFontColor(c.value)}
+                      title={c.label}
+                      type="button"
+                    />
+                  ))}
+                </div>
+              </div>
+              <div className="furigana-style-row">
+                <span className="furigana-style-label">振假名</span>
+                <div className="furigana-style-swatches">
+                  {RUBY_COLORS.map((c) => (
+                    <button
+                      key={c.value}
+                      className={`furigana-color-swatch${rubyColor === c.value ? ' active' : ''}`}
+                      style={{ background: c.value }}
+                      onClick={() => setRubyColor(c.value)}
+                      title={c.label}
+                      type="button"
+                    />
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div
+              ref={furiganaRef}
+              className="furigana-view-content"
+              style={{
+                backgroundColor: theme.bg,
+                color: fontColor,
+                '--furigana-ruby': rubyColor,
+              }}
+            >
+              {furiganaLines.map((line) => (
+                <div key={line.key} className="furigana-view-line">
+                  {line.content}
+                </div>
+              ))}
+            </div>
+          </>
         )}
 
         <div className="furigana-export-actions">
+          {view === 'furigana' ? (
+            <button
+              className="furigana-style-reset"
+              onClick={handleResetStyle}
+              type="button"
+              title="恢复默认样式"
+            >
+              ↺ 重置
+            </button>
+          ) : (
+            <span />
+          )}
           <div className="furigana-view-toggle" role="tablist">
             <button
               className={`furigana-view-toggle-btn${view === 'lrc' ? ' active' : ''}`}

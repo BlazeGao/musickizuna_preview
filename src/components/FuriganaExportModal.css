@@ -276,15 +276,10 @@
 
 .furigana-view-line rt {
   font-size: 0.5em;
-  color: #c8500a;
+  color: var(--furigana-ruby, #c8500a);
   font-weight: 500;
   letter-spacing: 0.5px;
   line-height: 1.2;
-}
-
-.furigana-view-line ruby.overridden rt {
-  color: #1a7a4a;
-  font-weight: 600;
 }
 
 .furigana-view-content::-webkit-scrollbar {
@@ -307,6 +302,114 @@
 .furigana-view-content {
   scrollbar-width: thin;
   scrollbar-color: rgba(200, 80, 10, 0.3) transparent;
+}
+
+.furigana-style-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 22px;
+  flex-shrink: 0;
+  background: rgba(0, 0, 0, 0.18);
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.furigana-style-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.furigana-style-label {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.55);
+  font-weight: 500;
+  width: 48px;
+  flex-shrink: 0;
+  letter-spacing: 0.5px;
+}
+
+.furigana-style-swatches {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.furigana-bg-swatch {
+  width: 36px;
+  height: 32px;
+  border-radius: 6px;
+  border: 1.5px solid rgba(255, 255, 255, 0.1);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Hiragino Sans', 'Yu Gothic', 'Meiryo', sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 0;
+  transition: all 0.15s;
+  position: relative;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+}
+
+.furigana-bg-swatch:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.4);
+}
+
+.furigana-bg-swatch.active {
+  border-color: rgba(255, 200, 120, 0.95);
+  box-shadow: 0 0 0 2px rgba(255, 200, 120, 0.25), 0 2px 8px rgba(0, 0, 0, 0.4);
+  transform: translateY(-1px);
+}
+
+.furigana-bg-swatch-char {
+  font-size: 15px;
+  line-height: 1;
+}
+
+.furigana-color-swatch {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(255, 255, 255, 0.15);
+  cursor: pointer;
+  padding: 0;
+  transition: all 0.15s;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.furigana-color-swatch:hover {
+  transform: scale(1.12);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+}
+
+.furigana-color-swatch.active {
+  border-color: #fff;
+  box-shadow: 0 0 0 2px rgba(255, 200, 120, 0.7), 0 2px 6px rgba(0, 0, 0, 0.4);
+  transform: scale(1.12);
+}
+
+.furigana-style-reset {
+  background: transparent;
+  border: 1px solid rgba(255, 200, 120, 0.3);
+  color: rgba(255, 200, 120, 0.85);
+  font-size: 12px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.furigana-style-reset:hover {
+  background: rgba(255, 200, 120, 0.12);
+  border-color: rgba(255, 200, 120, 0.55);
+  color: rgba(255, 200, 120, 1);
 }
 
 .furigana-export-btn {
