@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback, memo } from 'react'
 import { fetchPhonetic, buildRubySegments } from '../utils/phoneticDict'
 import { readLyric, stopCurrentAudio } from '../utils/tts'
+import FuriganaEditPopover from './FuriganaEditPopover'
 import './LyricsDisplay.css'
 
 function tokenize(text) {
@@ -65,12 +66,18 @@ const LyricLineGroup = memo(function LyricLineGroup({ line, index, isActive, onH
   )
 })
 
-function renderRubyText(text, tokens) {
-  const segments = buildRubySegments(text, tokens)
+function renderRubyText(text, tokens, lineIndex, lineText, onRubyClick, overrides) {
+  const segments = buildRubySegments(text, tokens, lineIndex, overrides)
   return segments.map((seg, i) => {
     if (seg.type === 'ruby') {
+      const className = `furigana-ruby editable${seg.isOverridden ? ' overridden' : ''}`
       return (
-        <ruby key={i} className="furigana-ruby">
+        <ruby
+          key={i}
+          className={className}
+          onClick={(e) => onRubyClick && onRubyClick(e, seg, lineIndex, lineText)}
+          title="点击修改读音"
+        >
           {seg.value}<rt>{seg.reading}</rt>
         </ruby>
       )
@@ -100,11 +107,12 @@ function renderTTSButtons(lineIndex, text, ttsLoading, onReadLyric, onStopTTS) {
   )
 }
 
-export default function LyricsDisplay({ lyricsMap, displayConfig, displayOrder, currentIndex, onSeek, activeLang, onPauseMusic, onResumeMusic, pinyinLyrics, furiganaMap, showFurigana }) {
+export default function LyricsDisplay({ lyricsMap, displayConfig, displayOrder, currentIndex, onSeek, activeLang, onPauseMusic, onResumeMusic, pinyinLyrics, furiganaMap, showFurigana, furiganaOverrides, overridesVersion, onSaveFuriganaOverride, onRemoveFuriganaOverride }) {
   const containerRef = useRef(null)
   const [selectedWords, setSelectedWords] = useState(new Map())
   const [hoveredIndex, setHoveredIndex] = useState(null)
   const [ttsLoading, setTtsLoading] = useState(null)
+  const [editPopover, setEditPopover] = useState(null)
 
   const ttsLang = 'zh'
   const showTts = activeLang === 'yue'
@@ -191,6 +199,31 @@ export default function LyricsDisplay({ lyricsMap, displayConfig, displayOrder, 
 
   const hoverOn = useCallback((i) => setHoveredIndex(i), [])
   const hoverOff = useCallback(() => setHoveredIndex(null), [])
+
+  const handleRubyClick = useCallback((e, seg, lineIndex, lineText) => {
+    e.stopPropagation()
+    e.preventDefault()
+    const rect = e.currentTarget.getBoundingClientRect()
+    const popoverWidth = 280
+    let left = rect.left + rect.width / 2 - popoverWidth / 2
+    if (left < 8) left = 8
+    if (left + popoverWidth > window.innerWidth - 8) left = window.innerWidth - popoverWidth - 8
+    setEditPopover({
+      lineIndex,
+      charIndex: seg.charIndex,
+      surface: seg.value,
+      currentReading: seg.reading,
+      originalReading: seg.isOverridden ? seg.reading : null,
+      isOverridden: !!seg.isOverridden,
+      lineText,
+      anchor: {
+        top: rect.bottom + 6,
+        left,
+      },
+    })
+  }, [])
+
+  const closeEditPopover = useCallback(() => setEditPopover(null), [])
 
   const useTtsForLine = useCallback((index, text) => {
     if (!showTts) return null
@@ -328,6 +361,7 @@ export default function LyricsDisplay({ lyricsMap, displayConfig, displayOrder, 
     const hasZh = zhLyrics.length > 0
     const renderFurigana = !!showFurigana && (furiganaMap?.ja?.length ?? 0) > 0
     const furiganaTokens = furiganaMap?.ja || []
+    const overrides = furiganaOverrides || {}
 
     if (jaLyrics.length === 0 && zhLyrics.length === 0) return renderEmpty('ja-empty')
 
@@ -341,7 +375,10 @@ export default function LyricsDisplay({ lyricsMap, displayConfig, displayOrder, 
             const jaLine = jaLyrics[index]
             if (jaLine) {
               const tokens = renderFurigana ? (furiganaTokens[index] || []) : []
-              subLines.push({ className: 'japanese-line', content: renderRubyText(jaLine.text, tokens) })
+              subLines.push({
+                className: 'japanese-line',
+                content: renderRubyText(jaLine.text, tokens, index, jaLine.text, handleRubyClick, overrides),
+              })
             }
             if (hasZh) {
               subLines.push({ className: 'chinese-line', content: zhLyrics[index]?.text || '' })
@@ -366,6 +403,20 @@ export default function LyricsDisplay({ lyricsMap, displayConfig, displayOrder, 
             )
           })}
         </div>
+        {editPopover && onSaveFuriganaOverride && (
+          <FuriganaEditPopover
+            popover={editPopover}
+            onSave={(reading, scope) => {
+              onSaveFuriganaOverride(editPopover.lineIndex, editPopover.charIndex, reading, scope)
+              setEditPopover(null)
+            }}
+            onRemove={() => {
+              onRemoveFuriganaOverride && onRemoveFuriganaOverride(editPopover.lineIndex, editPopover.charIndex)
+              setEditPopover(null)
+            }}
+            onClose={closeEditPopover}
+          />
+        )}
       </div>
     )
   }

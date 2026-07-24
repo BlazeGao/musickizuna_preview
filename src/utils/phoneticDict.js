@@ -5,14 +5,18 @@ const API_BASE = 'http://127.0.0.1:5001'
 
 const CACHE_KEY = 'phonetic_cache'
 const FURIGANA_CACHE_KEY = 'furigana_cache'
+const FURIGANA_OVERRIDES_KEY = 'furigana_overrides'
 
 let cache = {}
 let furiganaCache = {}
+let furiganaOverridesStore = {}
 try {
   const raw = localStorage.getItem(CACHE_KEY)
   if (raw) cache = JSON.parse(raw)
   const rawF = localStorage.getItem(FURIGANA_CACHE_KEY)
   if (rawF) furiganaCache = JSON.parse(rawF)
+  const rawO = localStorage.getItem(FURIGANA_OVERRIDES_KEY)
+  if (rawO) furiganaOverridesStore = JSON.parse(rawO)
 } catch {}
 
 function saveCache() {
@@ -24,6 +28,12 @@ function saveCache() {
 function saveFuriganaCache() {
   try {
     localStorage.setItem(FURIGANA_CACHE_KEY, JSON.stringify(furiganaCache))
+  } catch {}
+}
+
+function saveFuriganaOverrides() {
+  try {
+    localStorage.setItem(FURIGANA_OVERRIDES_KEY, JSON.stringify(furiganaOverridesStore))
   } catch {}
 }
 
@@ -65,6 +75,41 @@ export function generatePinyinLyrics(zhLyrics) {
 export function getCachedFurigana(text) {
   if (text in furiganaCache) return furiganaCache[text]
   return null
+}
+
+export function getFuriganaOverrides(songName) {
+  if (!songName) return {}
+  return furiganaOverridesStore[songName] || {}
+}
+
+export function setFuriganaOverride(songName, key, reading) {
+  if (!songName || !key) return
+  if (!furiganaOverridesStore[songName]) furiganaOverridesStore[songName] = {}
+  if (reading == null || reading === '') {
+    delete furiganaOverridesStore[songName][key]
+  } else {
+    furiganaOverridesStore[songName][key] = reading
+  }
+  if (Object.keys(furiganaOverridesStore[songName]).length === 0) {
+    delete furiganaOverridesStore[songName]
+  }
+  saveFuriganaOverrides()
+}
+
+export function removeFuriganaOverride(songName, key) {
+  if (!songName || !key) return
+  if (furiganaOverridesStore[songName]) {
+    delete furiganaOverridesStore[songName][key]
+    if (Object.keys(furiganaOverridesStore[songName]).length === 0) {
+      delete furiganaOverridesStore[songName]
+    }
+    saveFuriganaOverrides()
+  }
+}
+
+export function makeOverrideKey(lineIndex, charIndex, scope = 'local') {
+  const linePart = scope === 'all' ? '*' : lineIndex
+  return `${linePart}-${charIndex}`
 }
 
 export async function fetchFuriganaBatch(texts) {
@@ -190,11 +235,12 @@ function tokenizeKanjiKana(surface, reading) {
   return segments
 }
 
-export function buildRubySegments(text, tokens) {
+export function buildRubySegments(text, tokens, lineIndex, overrides) {
   if (!tokens || tokens.length === 0) {
-    return [{ type: 'text', value: text }]
+    return [{ type: 'text', value: text, charIndex: 0 }]
   }
 
+  const ov = overrides || {}
   const segments = []
   let cursor = 0
 
@@ -207,25 +253,42 @@ export function buildRubySegments(text, tokens) {
     if (idx < 0) continue
 
     if (idx > cursor) {
-      segments.push({ type: 'text', value: text.slice(cursor, idx) })
+      segments.push({ type: 'text', value: text.slice(cursor, idx), charIndex: cursor })
     }
 
     if (reading && KANJI_RE.test(surface)) {
       const sub = tokenizeKanjiKana(surface, reading)
       if (sub.length > 0) {
-        for (const s of sub) segments.push(s)
+        let segChar = idx
+        for (const s of sub) {
+          if (s.type === 'ruby') {
+            const localKey = `${lineIndex}-${segChar}`
+            const wildKey = `*-${segChar}`
+            const overrideReading = ov[localKey] || ov[wildKey]
+            segments.push({
+              type: 'ruby',
+              value: s.value,
+              reading: overrideReading || s.reading,
+              charIndex: segChar,
+              isOverridden: !!overrideReading,
+            })
+          } else {
+            segments.push({ type: 'text', value: s.value, charIndex: segChar })
+          }
+          segChar += s.value.length
+        }
       } else {
-        segments.push({ type: 'text', value: surface })
+        segments.push({ type: 'text', value: surface, charIndex: idx })
       }
     } else {
-      segments.push({ type: 'text', value: surface })
+      segments.push({ type: 'text', value: surface, charIndex: idx })
     }
 
     cursor = idx + surface.length
   }
 
   if (cursor < text.length) {
-    segments.push({ type: 'text', value: text.slice(cursor) })
+    segments.push({ type: 'text', value: text.slice(cursor), charIndex: cursor })
   }
 
   return segments

@@ -1,0 +1,237 @@
+.furigana-popover-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 9998;
+  background: transparent;
+}
+
+.furigana-popover {
+  position: fixed;
+  z-index: 9999;
+  width: 280px;
+  background: rgba(28, 30, 48, 0.98);
+  border: 1px solid rgba(255, 200, 120, 0.4);
+  border-radius: 10px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 200, 120, 0.1);
+  color: #fff;
+  font-size: 13px;
+  animation: furigana-popover-in 0.15s ease-out;
+  backdrop-filter: blur(8px);
+}
+
+@keyframes furigana-popover-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.furigana-popover-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-bottom: 1px solid rgba(255, 200, 120, 0.2);
+}
+
+.furigana-popover-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(255, 200, 120, 0.95);
+  letter-spacing: 0.5px;
+}
+
+.furigana-popover-close {
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 4px;
+  border-radius: 4px;
+  transition: all 0.15s;
+}
+
+.furigana-popover-close:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.furigana-popover-body {
+  padding: 12px 14px 14px;
+}
+
+.furigana-popover-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 8px;
+  line-height: 1.5;
+}
+
+.furigana-popover-label {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 12px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.furigana-popover-surface {
+  font-size: 18px;
+  font-weight: 600;
+  color: rgba(255, 200, 120, 0.95);
+  font-family: 'Hiragino Sans', 'Yu Gothic', 'Meiryo', sans-serif;
+}
+
+.furigana-popover-pos {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 12px;
+}
+
+.furigana-popover-input {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 200, 120, 0.3);
+  border-radius: 6px;
+  color: #fff;
+  font-size: 15px;
+  padding: 8px 10px;
+  font-family: 'Hiragino Sans', 'Yu Gothic', 'Meiryo', sans-serif;
+  outline: none;
+  transition: border-color 0.15s, background 0.15s;
+  margin: 4px 0 12px;
+}
+
+.furigana-popover-input:focus {
+  border-color: rgba(255, 200, 120, 0.7);
+  background: rgba(0, 0, 0, 0.4);
+  box-shadow: 0 0 0 2px rgba(255, 200, 120, 0.15);
+}
+
+.furigana-popover-input::placeholder {
+  color: rgba(255, 255, 255, 0.3);
+}
+
+.furigana-popover-scope {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 14px;
+  padding: 8px 10px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 6px;
+}
+
+.furigana-scope-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 12px;
+  padding: 2px 0;
+  transition: color 0.15s;
+}
+
+.furigana-scope-option:hover {
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.furigana-scope-option.active {
+  color: rgba(255, 200, 120, 0.95);
+}
+
+.furigana-scope-option input[type="radio"] {
+  margin: 0;
+  accent-color: rgba(255, 200, 120, 0.95);
+  cursor: pointer;
+}
+
+.furigana-popover-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.furigana-popover-actions-right {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.furigana-popover-btn {
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: all 0.15s;
+  font-family: inherit;
+}
+
+.furigana-popover-btn-primary {
+  background: rgba(255, 200, 120, 0.9);
+  color: #1c1e30;
+  border-color: rgba(255, 200, 120, 0.9);
+}
+
+.furigana-popover-btn-primary:hover:not(:disabled) {
+  background: rgba(255, 200, 120, 1);
+  border-color: rgba(255, 200, 120, 1);
+}
+
+.furigana-popover-btn-primary:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.furigana-popover-btn-secondary {
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.85);
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+.furigana-popover-btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+}
+
+.furigana-popover-btn-ghost {
+  background: transparent;
+  color: rgba(255, 120, 120, 0.85);
+  border-color: rgba(255, 120, 120, 0.3);
+  padding: 6px 12px;
+}
+
+.furigana-popover-btn-ghost:hover {
+  background: rgba(255, 120, 120, 0.15);
+  color: rgba(255, 120, 120, 1);
+  border-color: rgba(255, 120, 120, 0.5);
+}
+
+.furigana-ruby.editable {
+  cursor: pointer;
+  border-radius: 3px;
+  transition: background 0.15s;
+  padding: 0 1px;
+}
+
+.furigana-ruby.editable:hover {
+  background: rgba(255, 200, 120, 0.18);
+}
+
+.furigana-ruby.overridden rt {
+  color: rgba(139, 247, 200, 0.95) !important;
+  font-weight: 500;
+}
+
+.lyric-line-group.active .furigana-ruby.overridden rt {
+  color: rgba(139, 247, 200, 1) !important;
+}
+
+.lyric-line-group:not(.active) .furigana-ruby.overridden rt {
+  color: rgba(139, 247, 200, 0.55) !important;
+}

@@ -7,7 +7,7 @@ import FloatingActionMenu from './components/FloatingActionMenu'
 import { parseLRC, findCurrentLyricIndex } from './utils/lrcParser'
 import { getHistory, addHistoryEntry, removeHistoryEntry, updateEntryLyrics, removeEntryLyrics, reorderHistory } from './utils/historyManager'
 import { cacheAudio, getCachedAudio } from './utils/audioCache'
-import { generateJyutpingLyrics, generatePinyinLyrics, fetchFuriganaBatch, getCachedFurigana } from './utils/phoneticDict'
+import { generateJyutpingLyrics, generatePinyinLyrics, fetchFuriganaBatch, getCachedFurigana, getFuriganaOverrides, setFuriganaOverride, removeFuriganaOverride } from './utils/phoneticDict'
 import { useAllWorkspaceSettings } from './utils/workspaceSettings'
 
 const DEFAULT_WORKSPACE = () => ({ musicFile: null, musicName: '', lyricsMap: {}, currentIndex: -1 })
@@ -22,6 +22,8 @@ export default function App() {
   const [musicName, setMusicName] = useState('')
   const [lyricsMap, setLyricsMap] = useState({})
   const [furiganaMap, setFuriganaMap] = useState({})
+  const [furiganaOverrides, setFuriganaOverrides] = useState({})
+  const [overridesVersion, setOverridesVersion] = useState(0)
   const [currentIndex, setCurrentIndex] = useState(-1)
   const [history, setHistory] = useState(() => getHistory('zh'))
   const [currentTime, setCurrentTime] = useState(0)
@@ -108,11 +110,12 @@ export default function App() {
     if (newLang === activeLang) return
     if (isPlaying) playerRef.current?.togglePlay()
 
-    workspacesRef.current[activeLang] = { musicFile, musicName, lyricsMap, furiganaMap, currentIndex }
+    workspacesRef.current[activeLang] = { musicFile, musicName, lyricsMap, furiganaMap, furiganaOverrides, currentIndex }
 
     const snap = workspacesRef.current[newLang]
     let nextLyricsMap = { ...snap.lyricsMap }
     let nextFuriganaMap = { ...(snap.furiganaMap || {}) }
+    const nextFuriganaOverrides = snap.furiganaOverrides || {}
 
     if (newLang === 'yue' && !snap.lyricsMap.zh && lyricsMap.zh?.length > 0) {
       nextLyricsMap = { ...nextLyricsMap, zh: lyricsMap.zh }
@@ -120,12 +123,14 @@ export default function App() {
       nextLyricsMap = { ...nextLyricsMap, ja: lyricsMap.ja, zh: lyricsMap.zh || snap.lyricsMap.zh }
     }
 
-    workspacesRef.current[newLang] = { ...snap, lyricsMap: nextLyricsMap, furiganaMap: nextFuriganaMap }
+    workspacesRef.current[newLang] = { ...snap, lyricsMap: nextLyricsMap, furiganaMap: nextFuriganaMap, furiganaOverrides: nextFuriganaOverrides }
 
     setMusicFile(snap.musicFile)
     setMusicName(snap.musicName)
     setLyricsMap(nextLyricsMap)
     setFuriganaMap(nextFuriganaMap)
+    setFuriganaOverrides(nextFuriganaOverrides)
+    setOverridesVersion((v) => v + 1)
     setCurrentIndex(snap.currentIndex)
     setHistory(getHistory(newLang))
     setCurrentTime(0)
@@ -134,7 +139,7 @@ export default function App() {
     setSingleRepeat(false)
 
     setActiveLang(newLang)
-  }, [activeLang, musicFile, musicName, lyricsMap, furiganaMap, currentIndex, isPlaying])
+  }, [activeLang, musicFile, musicName, lyricsMap, furiganaMap, furiganaOverrides, currentIndex, isPlaying])
 
   const handleToggleSingleRepeat = useCallback(() => {
     setSingleRepeat((prev) => {
@@ -178,6 +183,48 @@ export default function App() {
     })
     return () => { cancelled = true }
   }, [lyricsMap.ja])
+
+  useEffect(() => {
+    if (musicName) {
+      setFuriganaOverrides(getFuriganaOverrides(musicName))
+      setOverridesVersion((v) => v + 1)
+    } else {
+      setFuriganaOverrides({})
+    }
+  }, [musicName])
+
+  const handleSaveFuriganaOverride = useCallback((lineIndex, charIndex, reading, scope) => {
+    if (!musicName) return
+    const wild = `*-${charIndex}`
+    const local = `${lineIndex}-${charIndex}`
+    if (scope === 'all') {
+      setFuriganaOverride(musicName, local, null)
+      setFuriganaOverride(musicName, wild, reading)
+    } else {
+      setFuriganaOverride(musicName, wild, null)
+      setFuriganaOverride(musicName, local, reading)
+    }
+    const updated = getFuriganaOverrides(musicName)
+    setFuriganaOverrides(updated)
+    setOverridesVersion((v) => v + 1)
+    workspacesRef.current[activeLang] = {
+      ...(workspacesRef.current[activeLang] || DEFAULT_WORKSPACE()),
+      furiganaOverrides: updated,
+    }
+  }, [musicName, activeLang])
+
+  const handleRemoveFuriganaOverride = useCallback((lineIndex, charIndex) => {
+    if (!musicName) return
+    removeFuriganaOverride(musicName, `${lineIndex}-${charIndex}`)
+    removeFuriganaOverride(musicName, `*-${charIndex}`)
+    const updated = getFuriganaOverrides(musicName)
+    setFuriganaOverrides(updated)
+    setOverridesVersion((v) => v + 1)
+    workspacesRef.current[activeLang] = {
+      ...(workspacesRef.current[activeLang] || DEFAULT_WORKSPACE()),
+      furiganaOverrides: updated,
+    }
+  }, [musicName, activeLang])
 
   const handleMusicSelect = useCallback((file) => {
     if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current)
@@ -415,6 +462,10 @@ export default function App() {
           pinyinLyrics={pinyinLyrics}
           furiganaMap={furiganaMap}
           showFurigana={wsSettings.ja.showFurigana}
+          furiganaOverrides={furiganaOverrides}
+          overridesVersion={overridesVersion}
+          onSaveFuriganaOverride={handleSaveFuriganaOverride}
+          onRemoveFuriganaOverride={handleRemoveFuriganaOverride}
         />
 
         <MusicPlayer
