@@ -204,7 +204,7 @@ export default function App() {
             const localKey = `${i}-${ann.charIndex}`
             const charKey = `c-${ann.surface}`
             if (!existing[localKey] && !existing[charKey]) {
-              merged[localKey] = { reading: ann.reading, romaji: '' }
+              merged[localKey] = { reading: ann.reading, romaji: '', source: 'inline' }
             }
           }
         }
@@ -303,7 +303,7 @@ export default function App() {
   const handleSaveFuriganaOverride = useCallback(async (lineIndex, charIndex, surface, reading, scope) => {
     if (!musicName) return
     const romaji = await fetchRomajiFromReading(reading)
-    const override = { reading, romaji: romaji || '' }
+    const override = { reading, romaji: romaji || '', source: 'user' }
     const local = `${lineIndex}-${charIndex}`
     const charKey = surface ? `c-${surface}` : null
     if (scope === 'all' && charKey) {

@@ -40,7 +40,12 @@ export function setFuriganaOverride(songName, key, override) {
   if (override == null) {
     delete furiganaOverridesStore[songName][key]
   } else {
-    furiganaOverridesStore[songName][key] = { reading: override.reading, romaji: override.romaji || '' }
+    const source = override.source || 'user'
+    furiganaOverridesStore[songName][key] = {
+      reading: override.reading,
+      romaji: override.romaji || '',
+      source,
+    }
   }
   if (Object.keys(furiganaOverridesStore[songName]).length === 0) {
     delete furiganaOverridesStore[songName]
@@ -55,7 +60,12 @@ export function mergeFuriganaOverrides(songName, overridesMap) {
     if (override == null) {
       delete furiganaOverridesStore[songName][key]
     } else {
-      furiganaOverridesStore[songName][key] = { reading: override.reading, romaji: override.romaji || '' }
+      const source = override.source || 'user'
+      furiganaOverridesStore[songName][key] = {
+        reading: override.reading,
+        romaji: override.romaji || '',
+        source,
+      }
     }
   }
   if (Object.keys(furiganaOverridesStore[songName]).length === 0) {
@@ -330,13 +340,14 @@ export function getLineWords(text, tokens, lineIndex, overrides) {
           const localKey = `${lineIndex}-${subChar}`
           const charKey = `c-${s.value}`
           const ovr = ov[localKey] || ov[charKey]
+          const isUserOverride = !!(ovr && ovr.source === 'user')
           words.push({
             wordId: currentWordId,
             isKanji: true,
             surface: s.value,
             reading: ovr ? ovr.reading : s.reading,
             romaji: ovr ? (ovr.romaji || '') : '',
-            isOverridden: !!ovr,
+            isOverridden: isUserOverride,
             needsApi: !ovr || !ovr.romaji,
           })
         } else if (s.value && s.value.length > 0 && isKanaChar(s.value[0])) {
@@ -437,6 +448,7 @@ export function buildRubySegments(text, tokens, lineIndex, overrides) {
             const localKey = `${lineIndex}-${segChar}`
             const charKey = `c-${s.value}`
             const override = ov[localKey] || ov[charKey]
+            const isUserOverride = !!(override && override.source === 'user')
             const effectiveReading = override ? override.reading : s.reading
             const effectiveRomaji = override ? override.romaji : ''
             segments.push({
@@ -445,7 +457,7 @@ export function buildRubySegments(text, tokens, lineIndex, overrides) {
               reading: effectiveReading,
               romaji: effectiveRomaji,
               charIndex: segChar,
-              isOverridden: !!override,
+              isOverridden: isUserOverride,
             })
           } else {
             segments.push({ type: 'text', value: s.value, charIndex: segChar })
