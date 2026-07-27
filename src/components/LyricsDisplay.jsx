@@ -244,6 +244,30 @@ export default function LyricsDisplay({ lyricsMap, displayConfig, displayOrder, 
     return m
   }, [jaLyrics, lyricsMap.zh])
 
+  const enabledLangs = displayOrder.filter((l) => l === 'pinyin' || displayConfig[l])
+  const hasJyutping = enabledLangs.includes('yue')
+  const hasPinyin = enabledLangs.includes('pinyin')
+  const hasJapanese = enabledLangs.includes('ja')
+
+  // For the generic dual-language branch (e.g. en + zh, zh + en), build a
+  // time-keyed lookup of the secondary language so we can pair primary and
+  // secondary lines by their timestamp instead of by array index. This is
+  // required when the two files have different structures — for example, the
+  // English file may have leading metadata lines (作词 / 作曲 / 编曲 / 制作人)
+  // while the Chinese file does not, which would otherwise offset every
+  // index-based pairing and scramble the bilingual display.
+  // Must be declared before the `if (!hasAnyLyrics) return` early return
+  // below to satisfy the Rules of Hooks.
+  const secondaryLyricsForDual = useMemo(() => {
+    if (enabledLangs.length !== 2) return new Map()
+    const sec = lyricsMap[enabledLangs[1]] || []
+    const m = new Map()
+    for (const l of sec) {
+      if (!m.has(l.time)) m.set(l.time, l)
+    }
+    return m
+  }, [enabledLangs, lyricsMap])
+
   const hasAnyLyrics = Object.keys(lyricsMap).some((lang) => lyricsMap[lang]?.length > 0)
 
   if (!hasAnyLyrics) {
@@ -253,11 +277,6 @@ export default function LyricsDisplay({ lyricsMap, displayConfig, displayOrder, 
       </div>
     )
   }
-
-  const enabledLangs = displayOrder.filter((l) => l === 'pinyin' || displayConfig[l])
-  const hasJyutping = enabledLangs.includes('yue')
-  const hasPinyin = enabledLangs.includes('pinyin')
-  const hasJapanese = enabledLangs.includes('ja')
 
   const renderEmpty = (key) => (
     <div className="lyrics-display" ref={containerRef} key={key}>
@@ -452,6 +471,29 @@ export default function LyricsDisplay({ lyricsMap, displayConfig, displayOrder, 
     const secondaryLyrics = lyricsMap[secondaryLang] || []
     const hasBoth = primaryLyrics.length > 0 && secondaryLyrics.length > 0
 
+    // Tolerance for matching a secondary line to a primary line by time.
+    // LRC files from different sources sometimes round timestamps slightly
+    // differently (e.g. 00:31.16 vs 00:31.160). 50ms is well below human
+    // perception of a lyric boundary.
+    const TIME_TOLERANCE = 0.05
+    const findSecondaryFor = (primaryLine) => {
+      if (!primaryLine) return null
+      if (secondaryLyricsForDual.has(primaryLine.time)) {
+        return secondaryLyricsForDual.get(primaryLine.time)
+      }
+      // Closest-match fallback for off-by-a-millisecond timestamps.
+      let best = null
+      let bestDelta = TIME_TOLERANCE
+      for (const l of secondaryLyrics) {
+        const delta = Math.abs(l.time - primaryLine.time)
+        if (delta < bestDelta) {
+          bestDelta = delta
+          best = l
+        }
+      }
+      return best
+    }
+
     if (!hasBoth) {
       const lyrics = primaryLyrics.length > 0 ? primaryLyrics : secondaryLyrics
       return (
@@ -482,27 +524,34 @@ export default function LyricsDisplay({ lyricsMap, displayConfig, displayOrder, 
     return (
       <div className="lyrics-display" ref={containerRef}>
         <div className="lyrics-content">
-          {primaryLyrics.map((line, index) => (
-            <LyricLineGroup
-              key={lineKey(line, index)}
-              line={line}
-              index={index}
-              isActive={index === currentIndex}
-              onHover={hoverOn}
-              onLeave={hoverOff}
-              onSeek={onSeek}
-              seekEnabled
-              showTts={showTts}
-              ttsText={line.text}
-              ttsLoading={ttsLoading && hoveredIndex === index}
-              onReadLyric={handleReadLyric}
-              onStopTTS={handleStopTTS}
-              subLines={[
-                { content: renderLineText(line.text) },
-                { content: secondaryLyrics[index]?.text || '' },
-              ]}
-            />
-          ))}
+          {primaryLyrics.map((line, index) => {
+            const matched = findSecondaryFor(line)
+            const subLines = [
+              { content: renderLineText(line.text) },
+              {
+                className: secondaryLang === 'zh' ? 'chinese-line' : '',
+                content: matched ? matched.text : '',
+              },
+            ]
+            return (
+              <LyricLineGroup
+                key={lineKey(line, index)}
+                line={line}
+                index={index}
+                isActive={index === currentIndex}
+                onHover={hoverOn}
+                onLeave={hoverOff}
+                onSeek={onSeek}
+                seekEnabled
+                showTts={showTts}
+                ttsText={line.text}
+                ttsLoading={ttsLoading && hoveredIndex === index}
+                onReadLyric={handleReadLyric}
+                onStopTTS={handleStopTTS}
+                subLines={subLines}
+              />
+            )
+          })}
         </div>
       </div>
     )

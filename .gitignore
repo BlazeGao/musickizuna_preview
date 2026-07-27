@@ -1,6 +1,5 @@
 node_modules
 dist
-*.mp3
 音乐素材/
 .DS_Store
 *.local
