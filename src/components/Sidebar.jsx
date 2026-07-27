@@ -31,24 +31,41 @@ export default function Sidebar({
   }
 
   const handleDragStart = useCallback((e, index) => {
+    if (history[index]?.isBuiltin) {
+      e.preventDefault()
+      return
+    }
     setDragIndex(index)
     e.dataTransfer.effectAllowed = 'move'
-  }, [])
+  }, [history])
 
   const handleDragOver = useCallback((e, index) => {
+    // Don't allow dropping onto a built-in (built-ins are pinned at the top).
+    if (history[index]?.isBuiltin) {
+      e.dataTransfer.dropEffect = 'none'
+      return
+    }
     e.preventDefault()
     e.dataTransfer.dropEffect = 'move'
     setDragOverIndex(index)
-  }, [])
+  }, [history])
 
   const handleDrop = useCallback((e, toIndex) => {
     e.preventDefault()
-    if (dragIndex !== null && dragIndex !== toIndex) {
-      onReorder(dragIndex, toIndex)
+    if (dragIndex === null || dragIndex === toIndex) {
+      setDragIndex(null)
+      setDragOverIndex(null)
+      return
     }
+    if (history[toIndex]?.isBuiltin || history[dragIndex]?.isBuiltin) {
+      setDragIndex(null)
+      setDragOverIndex(null)
+      return
+    }
+    onReorder(dragIndex, toIndex)
     setDragIndex(null)
     setDragOverIndex(null)
-  }, [dragIndex, onReorder])
+  }, [dragIndex, history, onReorder])
 
   const handleDragEnd = useCallback(() => {
     setDragIndex(null)

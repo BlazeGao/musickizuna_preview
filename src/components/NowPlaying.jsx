@@ -15,6 +15,7 @@ export default function NowPlaying({
   onDragOver,
   onDrop,
 }) {
+  const isBuiltin = !!entry?.isBuiltin
   const inputRefs = useRef({})
 
   const availableLangs = activeLang === 'en' ? ['zh', 'en'] : activeLang === 'yue' ? ['zh'] : activeLang === 'ja' ? ['ja', 'zh'] : [activeLang]
@@ -102,6 +103,8 @@ export default function NowPlaying({
           e.stopPropagation()
           onRemove(entry.id)
         }}
+        style={isBuiltin ? { display: 'none' } : undefined}
+        disabled={isBuiltin}
       >
         ×
       </button>

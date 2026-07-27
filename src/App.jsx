@@ -12,6 +12,7 @@ import { generateJyutpingLyrics, generatePinyinLyrics, downloadTextFile } from '
 import { fetchFuriganaBatch, getCachedFurigana, getFuriganaOverrides, setFuriganaOverride, removeFuriganaOverride, exportFuriganaLRC, fetchRomajiFromReading, fetchRomajiBatch, getLineWords, joinWordsToRomaji, hasAnyLineOverride } from './utils/japanesePhonetics'
 import { exportFuriganaToPDF } from './utils/pdfExport'
 import { useAllWorkspaceSettings } from './utils/workspaceSettings'
+import { getBuiltinEntries, isBuiltinMusicName } from './data/builtinSongs'
 
 const DEFAULT_WORKSPACE = () => ({ musicFile: null, musicName: '', lyricsMap: {}, currentIndex: -1 })
 
@@ -29,7 +30,20 @@ export default function App() {
   const [overridesVersion, setOverridesVersion] = useState(0)
   const [romajiLines, setRomajiLines] = useState({})
   const [currentIndex, setCurrentIndex] = useState(-1)
-  const [history, setHistory] = useState(() => getHistory('zh'))
+
+  // Each built-in belongs to exactly one workspace (see builtinSongs.js).
+  // mergeHistory prepends only that workspace's built-in above the user's
+  // localStorage entries. Callers SHOULD pass the target lang explicitly —
+  // see handleSwitchLang, where we must use newLang rather than the
+  // closure's still-old activeLang.
+  const mergeHistory = useCallback(
+    (localList, lang) => {
+      const target = lang || activeLang
+      return [...getBuiltinEntries(target), ...(localList || [])]
+    },
+    [activeLang]
+  )
+  const [history, setHistory] = useState(() => mergeHistory(getHistory('zh')))
   const [currentTime, setCurrentTime] = useState(0)
   const [autoPlay, setAutoPlay] = useState(false)
   const [isPlaying, setIsPlaying] = useState(false)
@@ -137,7 +151,7 @@ export default function App() {
     setFuriganaOverrides(nextFuriganaOverrides)
     setOverridesVersion((v) => v + 1)
     setCurrentIndex(snap.currentIndex)
-    setHistory(getHistory(newLang))
+    setHistory(mergeHistory(getHistory(newLang), newLang))
     setCurrentTime(0)
     repeatTargetRef.current = -1
     singleRepeatRef.current = false
@@ -352,11 +366,17 @@ export default function App() {
   }, [activeLang])
 
   useEffect(() => {
+    // Skip if a built-in already has this musicName (avoids duplicates and
+    // a no-op write to localStorage when the user picks a same-named file).
+    // Also skip if the musicName matches a built-in from any workspace —
+    // this prevents polluting the new workspace's localStorage when the
+    // user switches workspaces while a built-in is playing.
     if (musicName && !history.find((e) => e.musicName === musicName)) {
+      if (isBuiltinMusicName(musicName)) return
       const updated = addHistoryEntry(activeLang, musicName, '', {})
-      setHistory(updated)
+      setHistory(mergeHistory(updated))
     }
-  }, [musicName, activeLang])
+  }, [musicName, activeLang, history, mergeHistory])
 
   const loadEntry = useCallback(async (entry, shouldAutoPlay = false) => {
     setMusicName(entry.musicName)
@@ -375,6 +395,17 @@ export default function App() {
     setLyricsMap(parsedMap)
     setCurrentIndex(-1)
 
+    // Built-in entries ship with a static musicPath served from /assets/.
+    // Pass it straight to <audio src> — no IndexedDB lookup needed.
+    if (entry.musicPath) {
+      if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current)
+      audioUrlRef.current = null
+      setMusicFile(entry.musicPath)
+      if (shouldAutoPlay) setAutoPlay(true)
+      return
+    }
+
+    // User-uploaded entries pull the audio blob from IndexedDB.
     try {
       const blob = await getCachedAudio(entry.musicName)
       if (blob) {
@@ -396,16 +427,21 @@ export default function App() {
   }, [loadEntry])
 
   const handleRemoveEntry = useCallback((id) => {
+    // Block removal of built-in entries (UI also hides the button).
+    if (history.find((e) => e.id === id)?.isBuiltin) return
     const updated = removeHistoryEntry(activeLang, id)
-    setHistory(updated)
-  }, [activeLang])
+    setHistory(mergeHistory(updated))
+  }, [activeLang, history, mergeHistory])
 
   const handleAddLyricsToEntry = useCallback(async (entry, lang, file) => {
+    // Block mutation of built-in entries. They already have their shipped
+    // lyrics; if the user wants different ones, they can upload their own.
+    if (entry?.isBuiltin) return
     try {
       const text = await file.text()
       const storeLang = activeLang === 'yue' ? 'zh' : lang
       const updated = updateEntryLyrics(activeLang, entry.id, storeLang, file.name, text)
-      setHistory(updated)
+      setHistory(mergeHistory(updated))
 
       if (entry.musicName === musicName) {
         if (activeLang === 'yue') {
@@ -420,11 +456,12 @@ export default function App() {
     } catch (err) {
       console.error('Failed to add lyrics:', err)
     }
-  }, [activeLang, musicName])
+  }, [activeLang, musicName, mergeHistory])
 
   const handleRemoveLyricsFromEntry = useCallback((id, lang) => {
+    if (history.find((e) => e.id === id)?.isBuiltin) return
     const updated = removeEntryLyrics(activeLang, id, lang)
-    setHistory(updated)
+    setHistory(mergeHistory(updated))
     if (currentEntry?.id === id) {
       setLyricsMap((prev) => {
         const next = { ...prev }
@@ -432,7 +469,7 @@ export default function App() {
         return next
       })
     }
-  }, [activeLang, currentEntry])
+  }, [activeLang, currentEntry, history, mergeHistory])
 
   const handleTimeUpdate = useCallback((time) => {
     setCurrentTime(time)
@@ -498,9 +535,12 @@ export default function App() {
   }, [])
 
   const handleReorderHistory = useCallback((fromIndex, toIndex) => {
+    // Built-in entries are pinned to the top — don't let reorders move them
+    // or let user entries move past them.
+    if (history[fromIndex]?.isBuiltin || history[toIndex]?.isBuiltin) return
     const updated = reorderHistory(activeLang, fromIndex, toIndex)
-    setHistory(updated)
-  }, [activeLang])
+    setHistory(mergeHistory(updated))
+  }, [activeLang, history, mergeHistory])
 
   const handlePauseMusic = useCallback(() => {
     if (isPlaying) {
