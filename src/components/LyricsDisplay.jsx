@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo, memo } from 'react'
-import { fetchPhonetic, buildRubySegments } from '../utils/phoneticDict'
+import { fetchPhonetic } from '../utils/phoneticDict'
+import { buildRubySegments } from '../utils/japanesePhonetics'
 import { readLyric, stopCurrentAudio } from '../utils/tts'
 import FuriganaEditPopover from './FuriganaEditPopover'
 import './LyricsDisplay.css'
@@ -107,7 +108,7 @@ function renderTTSButtons(lineIndex, text, ttsLoading, onReadLyric, onStopTTS) {
   )
 }
 
-export default function LyricsDisplay({ lyricsMap, displayConfig, displayOrder, currentIndex, onSeek, activeLang, onPauseMusic, onResumeMusic, pinyinLyrics, furiganaMap, showFurigana, furiganaOverrides, overridesVersion, onSaveFuriganaOverride, onRemoveFuriganaOverride }) {
+export default function LyricsDisplay({ lyricsMap, displayConfig, displayOrder, currentIndex, onSeek, activeLang, onPauseMusic, onResumeMusic, pinyinLyrics, furiganaMap, showFurigana, furiganaOverrides, overridesVersion, romajiLines, lyricsOrderJa, onSaveFuriganaOverride, onRemoveFuriganaOverride }) {
   const containerRef = useRef(null)
   const [selectedWords, setSelectedWords] = useState(new Map())
   const [hoveredIndex, setHoveredIndex] = useState(null)
@@ -214,6 +215,7 @@ export default function LyricsDisplay({ lyricsMap, displayConfig, displayOrder, 
       charIndex: seg.charIndex,
       surface: seg.value,
       currentReading: seg.reading,
+      currentRomaji: seg.romaji || '',
       originalReading: seg.isOverridden ? seg.reading : null,
       isOverridden: !!seg.isOverridden,
       lineText,
@@ -372,6 +374,9 @@ export default function LyricsDisplay({ lyricsMap, displayConfig, displayOrder, 
     const renderFurigana = !!showFurigana && (furiganaMap?.ja?.length ?? 0) > 0
     const furiganaTokens = furiganaMap?.ja || []
     const overrides = furiganaOverrides || {}
+    const order = Array.isArray(lyricsOrderJa) && lyricsOrderJa.length > 0
+      ? lyricsOrderJa
+      : ['ja', 'romaji', 'zh']
 
     if (jaLyrics.length === 0 && zhLyrics.length === 0) return renderEmpty('ja-empty')
 
@@ -381,18 +386,26 @@ export default function LyricsDisplay({ lyricsMap, displayConfig, displayOrder, 
       <div className="lyrics-display" ref={containerRef}>
         <div className="lyrics-content">
           {primaryLyrics.map((line, index) => {
-            const subLines = []
             const jaLine = jaLyrics[index]
-            if (jaLine) {
-              const tokens = renderFurigana ? (furiganaTokens[index] || []) : []
-              subLines.push({
-                className: 'japanese-line',
-                content: renderRubyText(jaLine.text, tokens, index, jaLine.text, handleRubyClick, overrides),
-              })
+            const zhLine = jaLine ? zhLyricsForJa.get(jaLine.time) : zhLyrics[index]
+            const romaji = (romajiLines || {})[index]
+            const subLines = []
+            for (const item of order) {
+              if (item === 'ja' && jaLine) {
+                const tokens = renderFurigana ? (furiganaTokens[index] || []) : []
+                subLines.push({
+                  className: 'japanese-line',
+                  content: renderRubyText(jaLine.text, tokens, index, jaLine.text, handleRubyClick, overrides),
+                })
+              } else if (item === 'romaji' && jaLine && romaji) {
+                subLines.push({ className: 'romaji-line', content: romaji })
+              } else if (item === 'zh' && zhLine) {
+                subLines.push({ className: 'chinese-line', content: zhLine.text || '' })
+              }
             }
-            if (hasZh) {
-              const zhLine = jaLine ? zhLyricsForJa.get(jaLine.time) : zhLyrics[index]
-              subLines.push({ className: 'chinese-line', content: zhLine?.text || '' })
+            if (subLines.length === 0) {
+              if (jaLine) subLines.push({ className: 'japanese-line', content: jaLine.text })
+              else if (zhLine) subLines.push({ className: 'chinese-line', content: zhLine.text || '' })
             }
             return (
               <LyricLineGroup
@@ -417,7 +430,7 @@ export default function LyricsDisplay({ lyricsMap, displayConfig, displayOrder, 
         {editPopover && onSaveFuriganaOverride && (
           <FuriganaEditPopover
             popover={editPopover}
-            onSave={(reading, scope, surface) => {
+            onSave={(reading, romaji, scope, surface) => {
               onSaveFuriganaOverride(editPopover.lineIndex, editPopover.charIndex, surface, reading, scope)
               setEditPopover(null)
             }}

@@ -236,12 +236,12 @@ ruby rt {
 }
 
 .lyric-line-group.active .romaji-line .lyric-text {
-  font-size: 15px;
+  font-size: 20px;
   color: rgba(139, 247, 200, 0.8);
 }
 
 .lyric-line-group:not(.active) .romaji-line .lyric-text {
-  font-size: 12px;
+  font-size: 16px;
   color: rgba(139, 247, 200, 0.3);
 }
 

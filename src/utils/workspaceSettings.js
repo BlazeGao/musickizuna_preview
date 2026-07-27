@@ -8,7 +8,8 @@ export const WORKSPACE_DEFAULTS = {
     showChinese: true,
     showJapanese: true,
     showFurigana: true,
-    lyricsOrder: ['ja', 'zh'],
+    showRomaji: true,
+    lyricsOrder: ['ja', 'romaji', 'zh'],
   },
 }
 
@@ -17,13 +18,23 @@ const TOGGLE_LANG_OF = {
   showEnglish: 'en',
   showJyutping: 'yue',
   showJapanese: 'ja',
+  showRomaji: 'romaji',
 }
 
 const VISIBLE_KEYS = {
   zh: null,
   en: ['showChinese', 'showEnglish'],
   yue: ['showJyutping'],
-  ja: ['showChinese', 'showJapanese'],
+  ja: ['showChinese', 'showJapanese', 'showRomaji'],
+}
+
+function insertIntoOrder(order, item, afterLang) {
+  if (order.includes(item)) return order
+  const idx = order.indexOf(afterLang)
+  if (idx >= 0) {
+    return [...order.slice(0, idx + 1), item, ...order.slice(idx + 1)]
+  }
+  return [...order, item]
 }
 
 export function applySettingToggle(settings, lang, key) {
@@ -33,13 +44,22 @@ export function applySettingToggle(settings, lang, key) {
   if (VISIBLE_KEYS[lang]) {
     const visibleKeys = VISIBLE_KEYS[lang]
     if (visibleKeys.includes(key)) {
-      const hasVisible = visibleKeys.some((k) => next[k])
-      if (!hasVisible) return settings
+      if (lang === 'ja') {
+        const hasVisible = ['showJapanese', 'showChinese', 'showRomaji'].some((k) => next[k])
+        if (!hasVisible) return settings
+      } else {
+        const hasVisible = visibleKeys.some((k) => next[k])
+        if (!hasVisible) return settings
+      }
       const langCode = TOGGLE_LANG_OF[key]
       if (!next[key]) {
         next.lyricsOrder = next.lyricsOrder.filter((l) => l !== langCode)
       } else if (!next.lyricsOrder.includes(langCode)) {
-        next.lyricsOrder = [...next.lyricsOrder, langCode]
+        if (langCode === 'romaji') {
+          next.lyricsOrder = insertIntoOrder(next.lyricsOrder, 'romaji', 'ja')
+        } else {
+          next.lyricsOrder = [...next.lyricsOrder, langCode]
+        }
       }
     }
   }

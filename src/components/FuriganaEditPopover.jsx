@@ -1,15 +1,22 @@
 import { useState, useEffect, useRef } from 'react'
+import { fetchRomajiFromReading } from '../utils/japanesePhonetics'
 import './FuriganaEditPopover.css'
 
 export default function FuriganaEditPopover({ popover, onSave, onRemove, onClose }) {
   const [reading, setReading] = useState(popover.currentReading || '')
+  const [romaji, setRomaji] = useState(popover.currentRomaji || '')
   const [scope, setScope] = useState('local')
+  const [romajiLoading, setRomajiLoading] = useState(false)
   const inputRef = useRef(null)
+  const debounceRef = useRef(null)
+  const lastFetchedRef = useRef(popover.currentReading || '')
 
   useEffect(() => {
     setReading(popover.currentReading || '')
+    setRomaji(popover.currentRomaji || '')
     setScope('local')
-  }, [popover.currentReading, popover.lineIndex, popover.charIndex])
+    lastFetchedRef.current = popover.currentReading || ''
+  }, [popover.currentReading, popover.currentRomaji, popover.lineIndex, popover.charIndex])
 
   useEffect(() => {
     inputRef.current?.focus()
@@ -27,11 +34,41 @@ export default function FuriganaEditPopover({ popover, onSave, onRemove, onClose
     return () => document.removeEventListener('keydown', onKey)
   }, [onClose])
 
+  useEffect(() => () => {
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+  }, [])
+
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    const text = (reading || '').trim()
+    if (!text) {
+      setRomaji('')
+      lastFetchedRef.current = ''
+      return
+    }
+    if (text === lastFetchedRef.current) return
+    setRomajiLoading(true)
+    debounceRef.current = setTimeout(() => {
+      const target = text
+      fetchRomajiFromReading(target).then((r) => {
+        if (target !== (reading || '').trim()) return
+        lastFetchedRef.current = target
+        setRomaji(r || '')
+        setRomajiLoading(false)
+      }).catch(() => {
+        setRomajiLoading(false)
+      })
+    }, 250)
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current)
+    }
+  }, [reading])
+
   const handleSubmit = (e) => {
     e?.preventDefault?.()
     const trimmed = reading.trim()
     if (!trimmed) return
-    onSave(trimmed, scope, popover.surface)
+    onSave(trimmed, romaji, scope, popover.surface)
   }
 
   const handleReset = () => {
@@ -82,6 +119,13 @@ export default function FuriganaEditPopover({ popover, onSave, onRemove, onClose
               autoComplete="off"
               spellCheck={false}
             />
+
+            <div className="furigana-popover-row furigana-popover-row-romaji">
+              <span className="furigana-popover-label">罗马音:</span>
+              <span className={`furigana-popover-romaji${romajiLoading ? ' loading' : ''}`}>
+                {romaji || (romajiLoading ? '生成中…' : '—')}
+              </span>
+            </div>
 
             <div className="furigana-popover-scope">
               <label className={`furigana-scope-option ${scope === 'local' ? 'active' : ''}`}>

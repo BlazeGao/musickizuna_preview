@@ -24,7 +24,17 @@ _kks = pykakasi.kakasi()
 
 def _furigana_tokens(text):
     result = _kks.convert(text)
-    return [{'surface': r['orig'], 'reading': r['hira']} for r in result]
+    return [{'surface': r['orig'], 'reading': r['hira'], 'romaji': r['hepburn']} for r in result]
+
+
+def _reading_to_romaji(reading):
+    if not reading:
+        return ''
+    try:
+        result = _kks.convert(reading)
+        return ''.join(r['hepburn'] for r in result)
+    except Exception:
+        return ''
 
 TTS_CACHE_DIR = os.path.join(os.path.dirname(__file__), 'tts_cache')
 os.makedirs(TTS_CACHE_DIR, exist_ok=True)
@@ -180,6 +190,23 @@ def furigana_batch():
         except Exception:
             results.append([])
     return jsonify({'results': results})
+
+
+@app.route('/api/romaji/from-reading', methods=['POST'])
+def romaji_from_reading():
+    data = request.get_json() or {}
+    reading = (data.get('reading') or '').strip()
+    if not reading:
+        return jsonify({'romaji': ''})
+    return jsonify({'romaji': _reading_to_romaji(reading)})
+
+
+@app.route('/api/romaji/batch', methods=['POST'])
+def romaji_batch():
+    data = request.get_json() or {}
+    readings = data.get('readings') or []
+    results = [_reading_to_romaji(r) for r in readings]
+    return jsonify({'romaji': results})
 
 
 if __name__ == '__main__':

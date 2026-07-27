@@ -8,7 +8,8 @@ import FuriganaExportModal from './components/FuriganaExportModal'
 import { parseLRC, findCurrentLyricIndex } from './utils/lrcParser'
 import { getHistory, addHistoryEntry, removeHistoryEntry, updateEntryLyrics, removeEntryLyrics, reorderHistory } from './utils/historyManager'
 import { cacheAudio, getCachedAudio } from './utils/audioCache'
-import { generateJyutpingLyrics, generatePinyinLyrics, fetchFuriganaBatch, getCachedFurigana, getFuriganaOverrides, setFuriganaOverride, removeFuriganaOverride, exportFuriganaLRC, downloadTextFile } from './utils/phoneticDict'
+import { generateJyutpingLyrics, generatePinyinLyrics, downloadTextFile } from './utils/phoneticDict'
+import { fetchFuriganaBatch, getCachedFurigana, getFuriganaOverrides, setFuriganaOverride, removeFuriganaOverride, exportFuriganaLRC, fetchRomajiFromReading, fetchRomajiBatch, getLineWords, joinWordsToRomaji, hasAnyLineOverride } from './utils/japanesePhonetics'
 import { exportFuriganaToPDF } from './utils/pdfExport'
 import { useAllWorkspaceSettings } from './utils/workspaceSettings'
 
@@ -26,6 +27,7 @@ export default function App() {
   const [furiganaMap, setFuriganaMap] = useState({})
   const [furiganaOverrides, setFuriganaOverrides] = useState({})
   const [overridesVersion, setOverridesVersion] = useState(0)
+  const [romajiLines, setRomajiLines] = useState({})
   const [currentIndex, setCurrentIndex] = useState(-1)
   const [history, setHistory] = useState(() => getHistory('zh'))
   const [currentTime, setCurrentTime] = useState(0)
@@ -196,16 +198,72 @@ export default function App() {
     }
   }, [musicName])
 
-  const handleSaveFuriganaOverride = useCallback((lineIndex, charIndex, surface, reading, scope) => {
+  useEffect(() => {
+    const jaLyrics = lyricsMap.ja
+    if (!jaLyrics || jaLyrics.length === 0) {
+      setRomajiLines({})
+      return
+    }
+    const tokensList = furiganaMap?.ja || []
+    const ov = furiganaOverrides || {}
+
+    const tasks = []
+    for (let i = 0; i < jaLyrics.length; i++) {
+      const lineTokens = tokensList[i] || []
+      const words = getLineWords(jaLyrics[i].text, lineTokens, i, ov)
+      if (words.length === 0) continue
+      const apiIndices = []
+      const apiReadings = []
+      for (let j = 0; j < words.length; j++) {
+        if (words[j].needsApi) {
+          apiIndices.push(j)
+          apiReadings.push(words[j].reading)
+        }
+      }
+      const task = (async () => {
+        if (apiReadings.length > 0) {
+          const romajiList = await fetchRomajiBatch(apiReadings)
+          for (let k = 0; k < apiIndices.length; k++) {
+            words[apiIndices[k]].romaji = romajiList[k] || ''
+          }
+        }
+        return joinWordsToRomaji(words)
+      })()
+      tasks.push(task.then((romaji) => ({ i, romaji })))
+    }
+
+    let cancelled = false
+    Promise.all(tasks).then((results) => {
+      if (cancelled) return
+      const next = {}
+      for (const { i, romaji } of results) {
+        next[i] = romaji
+      }
+      setRomajiLines((prev) => {
+        const merged = { ...prev, ...next }
+        let changed = false
+        for (const k of Object.keys(merged)) {
+          if (prev[k] !== merged[k]) { changed = true; break }
+        }
+        return changed ? merged : prev
+      })
+    }).catch(() => {})
+
+    return () => { cancelled = true }
+  }, [lyricsMap.ja, furiganaMap, furiganaOverrides])
+
+  const handleSaveFuriganaOverride = useCallback(async (lineIndex, charIndex, surface, reading, scope) => {
     if (!musicName) return
+    const romaji = await fetchRomajiFromReading(reading)
+    const override = { reading, romaji: romaji || '' }
     const local = `${lineIndex}-${charIndex}`
     const charKey = surface ? `c-${surface}` : null
     if (scope === 'all' && charKey) {
       setFuriganaOverride(musicName, local, null)
-      setFuriganaOverride(musicName, charKey, reading)
+      setFuriganaOverride(musicName, charKey, override)
     } else {
       if (charKey) setFuriganaOverride(musicName, charKey, null)
-      setFuriganaOverride(musicName, local, reading)
+      setFuriganaOverride(musicName, local, override)
     }
     const updated = getFuriganaOverrides(musicName)
     setFuriganaOverrides(updated)
@@ -505,6 +563,8 @@ export default function App() {
           showFurigana={wsSettings.ja.showFurigana}
           furiganaOverrides={furiganaOverrides}
           overridesVersion={overridesVersion}
+          romajiLines={romajiLines}
+          lyricsOrderJa={wsSettings.ja.lyricsOrder}
           onSaveFuriganaOverride={handleSaveFuriganaOverride}
           onRemoveFuriganaOverride={handleRemoveFuriganaOverride}
         />

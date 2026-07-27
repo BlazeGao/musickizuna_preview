@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useMemo } from 'react'
-import { buildRubySegments } from '../utils/phoneticDict'
+import { buildRubySegments } from '../utils/japanesePhonetics'
 import { THEME_PRESETS, FONT_COLORS, RUBY_COLORS, DEFAULT_THEME } from '../utils/themePresets'
 import './FuriganaExportModal.css'
 

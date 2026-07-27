@@ -6,6 +6,7 @@ const LANG_LABELS = {
   zh: '中文歌词',
   yue: '粤拼歌词',
   ja: '日文歌词',
+  romaji: '罗马音',
 }
 
 function WorkspaceControls({ activeLang, settings, onToggleSetting, onReorderLyrics, onExportFuriganaLRC }) {
@@ -143,6 +144,13 @@ function WorkspaceControls({ activeLang, settings, onToggleSetting, onReorderLyr
             title="显示/隐藏汉字振假名"
           >
             振假名
+          </button>
+          <button
+            className={`toggle-btn${settings.ja.showRomaji ? ' active' : ''}`}
+            onClick={() => onToggleSetting('ja', 'showRomaji')}
+            title="显示/隐藏罗马音"
+          >
+            罗马音
           </button>
         </div>
         {renderOrderGroup(settings.ja.lyricsOrder)}
