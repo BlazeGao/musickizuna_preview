@@ -392,6 +392,7 @@ export default function LyricsDisplay({ lyricsMap, displayConfig, displayOrder, 
     const hasZh = zhLyrics.length > 0
     const renderFurigana = !!showFurigana && (furiganaMap?.ja?.length ?? 0) > 0
     const furiganaTokens = furiganaMap?.ja || []
+    const cleanedTexts = furiganaMap?.cleanedTexts || []
     const overrides = furiganaOverrides || {}
     const order = Array.isArray(lyricsOrderJa) && lyricsOrderJa.length > 0
       ? lyricsOrderJa
@@ -412,9 +413,10 @@ export default function LyricsDisplay({ lyricsMap, displayConfig, displayOrder, 
             for (const item of order) {
               if (item === 'ja' && jaLine) {
                 const tokens = renderFurigana ? (furiganaTokens[index] || []) : []
+                const displayText = cleanedTexts[index] || jaLine.text
                 subLines.push({
                   className: 'japanese-line',
-                  content: renderRubyText(jaLine.text, tokens, index, jaLine.text, handleRubyClick, overrides),
+                  content: renderRubyText(displayText, tokens, index, jaLine.text, handleRubyClick, overrides),
                 })
               } else if (item === 'romaji' && jaLine && romaji) {
                 subLines.push({ className: 'romaji-line', content: romaji })
@@ -423,7 +425,7 @@ export default function LyricsDisplay({ lyricsMap, displayConfig, displayOrder, 
               }
             }
             if (subLines.length === 0) {
-              if (jaLine) subLines.push({ className: 'japanese-line', content: jaLine.text })
+              if (jaLine) subLines.push({ className: 'japanese-line', content: cleanedTexts[index] || jaLine.text })
               else if (zhLine) subLines.push({ className: 'chinese-line', content: zhLine.text || '' })
             }
             return (

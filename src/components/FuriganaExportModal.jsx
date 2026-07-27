@@ -17,7 +17,7 @@ function renderFuriganaLine(text, tokens, lineIndex, overrides) {
   })
 }
 
-export default function FuriganaExportModal({ open, filename, lrcText, lineCount, jaLyrics, furiganaTokens, furiganaOverrides, onDownload, onClose }) {
+export default function FuriganaExportModal({ open, filename, lrcText, lineCount, jaLyrics, furiganaTokens, cleanedTexts, furiganaOverrides, onDownload, onClose }) {
   const textareaRef = useRef(null)
   const furiganaRef = useRef(null)
   const [view, setView] = useState('lrc')
@@ -74,9 +74,9 @@ export default function FuriganaExportModal({ open, filename, lrcText, lineCount
     if (!jaLyrics || jaLyrics.length === 0) return []
     return jaLyrics.map((line, idx) => ({
       key: idx,
-      content: renderFuriganaLine(line.text, furiganaTokens?.[idx] || [], idx, furiganaOverrides || {}),
+      content: renderFuriganaLine((cleanedTexts && cleanedTexts[idx]) || line.text, furiganaTokens?.[idx] || [], idx, furiganaOverrides || {}),
     }))
-  }, [jaLyrics, furiganaTokens, furiganaOverrides])
+  }, [jaLyrics, furiganaTokens, cleanedTexts, furiganaOverrides])
 
   if (!open) return null
 

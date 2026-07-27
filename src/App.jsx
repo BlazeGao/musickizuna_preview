@@ -9,7 +9,7 @@ import { parseLRC, findCurrentLyricIndex } from './utils/lrcParser'
 import { getHistory, addHistoryEntry, removeHistoryEntry, updateEntryLyrics, removeEntryLyrics, reorderHistory } from './utils/historyManager'
 import { cacheAudio, getCachedAudio } from './utils/audioCache'
 import { generateJyutpingLyrics, generatePinyinLyrics, downloadTextFile } from './utils/phoneticDict'
-import { fetchFuriganaBatch, getCachedFurigana, getFuriganaOverrides, setFuriganaOverride, removeFuriganaOverride, exportFuriganaLRC, fetchRomajiFromReading, fetchRomajiBatch, getLineWords, joinWordsToRomaji, hasAnyLineOverride } from './utils/japanesePhonetics'
+import { fetchFuriganaBatch, getCachedFurigana, getFuriganaOverrides, setFuriganaOverride, mergeFuriganaOverrides, removeFuriganaOverride, exportFuriganaLRC, fetchRomajiFromReading, fetchRomajiBatch, getLineWords, joinWordsToRomaji, hasAnyLineOverride, parseInlineAnnotations } from './utils/japanesePhonetics'
 import { exportFuriganaToPDF } from './utils/pdfExport'
 import { useAllWorkspaceSettings } from './utils/workspaceSettings'
 import { getBuiltinEntries, isBuiltinMusicName } from './data/builtinSongs'
@@ -188,20 +188,52 @@ export default function App() {
       setFuriganaMap((prev) => (Object.keys(prev).length === 0 ? prev : {}))
       return
     }
-    const texts = jaLyrics.map((l) => l.text)
-    const allCached = texts.every((t) => getCachedFurigana(t) !== null)
+
+    const parsedLines = jaLyrics.map((l) => parseInlineAnnotations(l.text))
+    const cleanedTexts = parsedLines.map((p) => p.cleanText)
+    const hasInline = parsedLines.some((p) => p.annotations.length > 0)
+
+    const allCached = cleanedTexts.every((t) => getCachedFurigana(t) !== null)
+    const setTokensAndOverrides = (tokens) => {
+      setFuriganaMap({ ja: tokens, cleanedTexts })
+      if (hasInline) {
+        const existing = musicName ? getFuriganaOverrides(musicName) : {}
+        const merged = { ...existing }
+        for (let i = 0; i < parsedLines.length; i++) {
+          for (const ann of parsedLines[i].annotations) {
+            const localKey = `${i}-${ann.charIndex}`
+            const charKey = `c-${ann.surface}`
+            if (!existing[localKey] && !existing[charKey]) {
+              merged[localKey] = { reading: ann.reading, romaji: '' }
+            }
+          }
+        }
+        if (musicName) {
+          mergeFuriganaOverrides(musicName, merged)
+        }
+        setFuriganaOverrides(merged)
+        setOverridesVersion((v) => v + 1)
+        if (musicName) {
+          workspacesRef.current[activeLang] = {
+            ...(workspacesRef.current[activeLang] || DEFAULT_WORKSPACE()),
+            furiganaOverrides: merged,
+          }
+        }
+      }
+    }
+
     if (allCached) {
-      const tokens = texts.map((t) => getCachedFurigana(t))
-      setFuriganaMap({ ja: tokens })
+      const tokens = cleanedTexts.map((t) => getCachedFurigana(t))
+      setTokensAndOverrides(tokens)
       return
     }
     let cancelled = false
-    fetchFuriganaBatch(texts).then((tokens) => {
+    fetchFuriganaBatch(cleanedTexts).then((tokens) => {
       if (cancelled) return
-      setFuriganaMap({ ja: tokens })
+      setTokensAndOverrides(tokens)
     })
     return () => { cancelled = true }
-  }, [lyricsMap.ja])
+  }, [lyricsMap.ja, musicName, activeLang])
 
   useEffect(() => {
     if (musicName) {
@@ -219,12 +251,14 @@ export default function App() {
       return
     }
     const tokensList = furiganaMap?.ja || []
+    const cleanedTexts = furiganaMap?.cleanedTexts || []
     const ov = furiganaOverrides || {}
 
     const tasks = []
     for (let i = 0; i < jaLyrics.length; i++) {
       const lineTokens = tokensList[i] || []
-      const words = getLineWords(jaLyrics[i].text, lineTokens, i, ov)
+      const text = cleanedTexts[i] || jaLyrics[i].text
+      const words = getLineWords(text, lineTokens, i, ov)
       if (words.length === 0) continue
       const apiIndices = []
       const apiReadings = []
@@ -306,7 +340,8 @@ export default function App() {
     const jaLyrics = lyricsMap.ja || []
     if (jaLyrics.length === 0) return
     const tokens = furiganaMap?.ja || []
-    const lrc = exportFuriganaLRC(jaLyrics, tokens, furiganaOverrides)
+    const cleanedTexts = furiganaMap?.cleanedTexts || []
+    const lrc = exportFuriganaLRC(jaLyrics, tokens, furiganaOverrides, cleanedTexts)
     if (!lrc) return
     const baseName = musicName.replace(/\.[^/.]+$/, '')
     setExportModal({
@@ -642,6 +677,7 @@ export default function App() {
         lineCount={exportModal?.lineCount || 0}
         jaLyrics={lyricsMap.ja || []}
         furiganaTokens={furiganaMap?.ja || []}
+        cleanedTexts={furiganaMap?.cleanedTexts || []}
         furiganaOverrides={furiganaOverrides}
         onDownload={handleDownloadFromModal}
         onClose={handleCloseExportModal}

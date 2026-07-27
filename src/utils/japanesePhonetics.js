@@ -48,6 +48,22 @@ export function setFuriganaOverride(songName, key, override) {
   saveFuriganaOverrides()
 }
 
+export function mergeFuriganaOverrides(songName, overridesMap) {
+  if (!songName || !overridesMap) return
+  if (!furiganaOverridesStore[songName]) furiganaOverridesStore[songName] = {}
+  for (const [key, override] of Object.entries(overridesMap)) {
+    if (override == null) {
+      delete furiganaOverridesStore[songName][key]
+    } else {
+      furiganaOverridesStore[songName][key] = { reading: override.reading, romaji: override.romaji || '' }
+    }
+  }
+  if (Object.keys(furiganaOverridesStore[songName]).length === 0) {
+    delete furiganaOverridesStore[songName]
+  }
+  saveFuriganaOverrides()
+}
+
 export function removeFuriganaOverride(songName, key) {
   if (!songName || !key) return
   if (furiganaOverridesStore[songName]) {
@@ -70,18 +86,19 @@ function formatLRCTime(time) {
   return `${String(mins).padStart(2, '0')}:${secs.toFixed(2).padStart(5, '0')}`
 }
 
-export function exportFuriganaLRC(jaLyrics, furiganaTokens, overrides) {
+export function exportFuriganaLRC(jaLyrics, furiganaTokens, overrides, cleanedTexts) {
   if (!jaLyrics || jaLyrics.length === 0) return ''
   const out = []
   for (let i = 0; i < jaLyrics.length; i++) {
     const line = jaLyrics[i]
     const tokens = (furiganaTokens && furiganaTokens[i]) || []
-    const segments = buildRubySegments(line.text, tokens, i, overrides || {})
-    const text = segments.map((seg) => {
-      if (seg.type === 'ruby') return `${seg.value}《${seg.reading}》`
+    const text = (cleanedTexts && cleanedTexts[i]) || line.text
+    const segments = buildRubySegments(text, tokens, i, overrides || {})
+    const lineText = segments.map((seg) => {
+      if (seg.type === 'ruby') return `${seg.value}(${seg.reading})`
       return seg.value
     }).join('')
-    out.push(`[${formatLRCTime(line.time)}]${text}`)
+    out.push(`[${formatLRCTime(line.time)}]${lineText}`)
   }
   return out.join('\n') + '\n'
 }
@@ -157,6 +174,41 @@ export async function fetchRomajiBatch(readings) {
   } catch {
     return new Array(list.length).fill('')
   }
+}
+
+const INLINE_ANNOTATION_RE = /([\u4e00-\u9fff\u3400-\u4dbf\u3005\u3007㐀-鿿豈-﫿]+)([（(])([ぁ-ゟゖ-ヿ]+)([）)])/g
+
+export function parseInlineAnnotations(text) {
+  if (!text) return { cleanText: '', annotations: [] }
+
+  const annotations = []
+  let cleanText = ''
+  let originalIdx = 0
+  let match
+
+  INLINE_ANNOTATION_RE.lastIndex = 0
+  while ((match = INLINE_ANNOTATION_RE.exec(text)) !== null) {
+    const matchStart = match.index
+    const matchEnd = matchStart + match[0].length
+
+    if (matchStart > originalIdx) {
+      cleanText += text.slice(originalIdx, matchStart)
+    }
+
+    const surface = match[1]
+    const reading = match[3]
+    const charIndex = cleanText.length
+    cleanText += surface
+    annotations.push({ surface, reading, charIndex })
+
+    originalIdx = matchEnd
+  }
+
+  if (originalIdx < text.length) {
+    cleanText += text.slice(originalIdx)
+  }
+
+  return { cleanText, annotations }
 }
 
 const KANJI_RE = /[㐀-鿿豈-﫿぀-ヿ㇀-ㇿ]/
@@ -285,7 +337,7 @@ export function getLineWords(text, tokens, lineIndex, overrides) {
             reading: ovr ? ovr.reading : s.reading,
             romaji: ovr ? (ovr.romaji || '') : '',
             isOverridden: !!ovr,
-            needsApi: !ovr,
+            needsApi: !ovr || !ovr.romaji,
           })
         } else if (s.value && s.value.length > 0 && isKanaChar(s.value[0])) {
           if (lastSegmentKind !== 'kanji') {
