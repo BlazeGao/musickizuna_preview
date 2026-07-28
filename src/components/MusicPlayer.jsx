@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect, useCallback, forwardRef, useImperativeHandle } from 'react'
 import './MusicPlayer.css'
 
+const SPEED_OPTIONS = [1.2, 1, 0.8, 0.5]
+
 const MusicPlayer = forwardRef(function MusicPlayer({
   musicFile,
   onTimeUpdate,
@@ -14,6 +16,9 @@ const MusicPlayer = forwardRef(function MusicPlayer({
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(0)
   const [volume, setVolume] = useState(1)
+  const [playbackRate, setPlaybackRate] = useState(1)
+  const [showSpeedMenu, setShowSpeedMenu] = useState(false)
+  const speedMenuRef = useRef(null)
 
   const onTimeUpdateRef = useRef(onTimeUpdate)
   const onPlayingChangeRef = useRef(onPlayingChange)
@@ -53,6 +58,7 @@ const MusicPlayer = forwardRef(function MusicPlayer({
     },
     get isPlaying() { return !audioRef.current?.paused },
     get currentTime() { return audioRef.current?.currentTime ?? 0 },
+    get playbackRate() { return audioRef.current?.playbackRate ?? 1 },
   }))
 
   useEffect(() => {
@@ -138,6 +144,23 @@ const MusicPlayer = forwardRef(function MusicPlayer({
     setVolume(vol)
   }, [])
 
+  const handlePlaybackRate = useCallback((rate) => {
+    const audio = audioRef.current
+    if (audio) audio.playbackRate = rate
+    setPlaybackRate(rate)
+    setShowSpeedMenu(false)
+  }, [])
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (speedMenuRef.current && !speedMenuRef.current.contains(e.target)) {
+        setShowSpeedMenu(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
   const formatTime = (t) => {
     const mins = Math.floor(t / 60)
     const secs = Math.floor(t % 60)
@@ -177,6 +200,29 @@ const MusicPlayer = forwardRef(function MusicPlayer({
             value={volume}
             onChange={handleVolume}
           />
+        </div>
+
+        <div className="speed-control" ref={speedMenuRef}>
+          <button
+            className={`speed-btn${playbackRate !== 1 ? ' active' : ''}`}
+            onClick={() => setShowSpeedMenu(!showSpeedMenu)}
+            title="播放倍速"
+          >
+            {playbackRate}x
+          </button>
+          {showSpeedMenu && (
+            <div className="speed-menu">
+              {SPEED_OPTIONS.map((rate) => (
+                <button
+                  key={rate}
+                  className={`speed-option${playbackRate === rate ? ' selected' : ''}`}
+                  onClick={() => handlePlaybackRate(rate)}
+                >
+                  {rate}x
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>
