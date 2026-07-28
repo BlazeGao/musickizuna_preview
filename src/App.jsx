@@ -5,6 +5,7 @@ import WorkspaceControls from './components/WorkspaceControls'
 import LyricsDisplay from './components/LyricsDisplay'
 import FloatingActionMenu from './components/FloatingActionMenu'
 import FuriganaExportModal from './components/FuriganaExportModal'
+import LandingPage from './components/LandingPage'
 import { parseLRC, findCurrentLyricIndex } from './utils/lrcParser'
 import { getHistory, addHistoryEntry, removeHistoryEntry, updateEntryLyrics, removeEntryLyrics, reorderHistory } from './utils/historyManager'
 import { cacheAudio, getCachedAudio } from './utils/audioCache'
@@ -17,6 +18,7 @@ import { getBuiltinEntries, isBuiltinMusicName } from './data/builtinSongs'
 const DEFAULT_WORKSPACE = () => ({ musicFile: null, musicName: '', lyricsMap: {}, currentIndex: -1 })
 
 export default function App() {
+  const [showLanding, setShowLanding] = useState(() => window.location.hash !== '#player')
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [activeLang, setActiveLang] = useState('zh')
 
@@ -591,6 +593,21 @@ export default function App() {
     }
   }, [isPlaying])
 
+  useEffect(() => {
+    const handleHashChange = () => setShowLanding(window.location.hash !== '#player')
+    window.addEventListener('hashchange', handleHashChange)
+    return () => window.removeEventListener('hashchange', handleHashChange)
+  }, [])
+
+  const handleEnterSite = useCallback(() => {
+    window.location.hash = 'player'
+    setShowLanding(false)
+  }, [])
+
+  if (showLanding) {
+    return <LandingPage onEnter={handleEnterSite} />
+  }
+
   return (
     <div className="app">
       <Sidebar
@@ -663,10 +680,10 @@ export default function App() {
         />
 
         <FloatingActionMenu items={[
-          { icon: '▼', label: '下一句', onClick: handleNextLyric },
+          { icon: '▲', label: '上一句', onClick: handlePrevLyric },
           { icon: isPlaying ? '⏸' : '▶', label: isPlaying ? '暂停' : '播放', onClick: handleTogglePlay, active: isPlaying },
           { icon: '🔂', label: singleRepeat ? '关闭单句循环' : '开启单句循环', onClick: handleToggleSingleRepeat, active: singleRepeat },
-          { icon: '▲', label: '上一句', onClick: handlePrevLyric },
+          { icon: '▼', label: '下一句', onClick: handleNextLyric },
         ]} />
       </main>
 

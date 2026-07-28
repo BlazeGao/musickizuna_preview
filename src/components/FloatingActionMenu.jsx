@@ -2,73 +2,71 @@ import { useState, useRef, useCallback, useEffect } from 'react'
 import './FloatingActionMenu.css'
 
 const DRAG_THRESHOLD = 4
-
-const ChevronUp = () => (
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-    <polyline points="18 15 12 9 6 15" />
-  </svg>
-)
-
-const ChevronDown = () => (
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-    <polyline points="6 9 12 15 18 9" />
-  </svg>
-)
-
-const RepeatOneIcon = () => (
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <polyline points="17 1 21 5 17 9" />
-    <path d="M3 5h14a4 4 0 0 1 0 8h-1" />
-    <polyline points="7 23 3 19 7 15" />
-    <path d="M21 19H7a4 4 0 0 1 0-8h1" />
-    <text x="12" y="14.5" textAnchor="middle" fill="currentColor" stroke="none" fontSize="8" fontWeight="700" fontFamily="sans-serif">1</text>
-  </svg>
-)
-
-const PlayIcon = () => (
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-    <polygon points="6 3 20 12 6 21" />
-  </svg>
-)
-
-const PauseIcon = () => (
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-    <rect x="5" y="3" width="4" height="18" rx="1" />
-    <rect x="15" y="3" width="4" height="18" rx="1" />
-  </svg>
-)
+const VIEWPORT_GAP = 12
 
 const ICONS = {
-  '▲': ChevronUp,
-  '▼': ChevronDown,
-  '⏸': PauseIcon,
-  '▶': PlayIcon,
-  '🔂': RepeatOneIcon,
+  '▲': '/assets/button_icon/arrow_up.png',
+  '▼': '/assets/button_icon/arrow_down.png',
+  '⏸': '/assets/button_icon/pause.png',
+  '▶': '/assets/button_icon/play.png',
+  '🔂': '/assets/button_icon/recycle_open.png',
 }
 
 export default function FloatingActionMenu({ items = [] }) {
   const [open, setOpen] = useState(false)
   const [pos, setPos] = useState({ bottom: 96, right: 32 })
-  const posRef = useRef(pos)
-  useEffect(() => { posRef.current = pos }, [pos])
-  const dragRef = useRef({ dragging: false, startX: 0, startY: 0, startBottom: 0, startRight: 0, moved: false })
+  const menuRef = useRef(null)
+  const dragRef = useRef({ dragging: false, startX: 0, startY: 0, startLeft: 0, startTop: 0, width: 0, height: 0, moved: false })
+
+  const clampToViewport = useCallback((left, top, width, height) => {
+    const maxLeft = Math.max(VIEWPORT_GAP, window.innerWidth - width - VIEWPORT_GAP)
+    const maxTop = Math.max(VIEWPORT_GAP, window.innerHeight - height - VIEWPORT_GAP)
+    const nextLeft = Math.min(Math.max(left, VIEWPORT_GAP), maxLeft)
+    const nextTop = Math.min(Math.max(top, VIEWPORT_GAP), maxTop)
+    return {
+      bottom: window.innerHeight - nextTop - height,
+      right: window.innerWidth - nextLeft - width,
+    }
+  }, [])
+
+  useEffect(() => {
+    const handleResize = () => {
+      const rect = menuRef.current?.getBoundingClientRect()
+      if (!rect) return
+      setPos(clampToViewport(rect.left, rect.top, rect.width, rect.height))
+    }
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [clampToViewport])
+
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      const rect = menuRef.current?.getBoundingClientRect()
+      if (rect) setPos(clampToViewport(rect.left, rect.top, rect.width, rect.height))
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [open, clampToViewport])
 
   const handlePointerDown = useCallback((e) => {
     if (e.button && e.button !== 0) return
+    const rect = menuRef.current?.getBoundingClientRect()
+    if (!rect) return
     const d = dragRef.current
     d.dragging = true
     d.moved = false
     d.startX = e.clientX
     d.startY = e.clientY
-    d.startBottom = posRef.current.bottom
-    d.startRight = posRef.current.right
+    d.startLeft = rect.left
+    d.startTop = rect.top
+    d.width = rect.width
+    d.height = rect.height
 
     const onMove = (ev) => {
       if (!d.dragging) return
       const dx = ev.clientX - d.startX
-      const dy = d.startY - ev.clientY
+      const dy = ev.clientY - d.startY
       if (Math.abs(dx) > DRAG_THRESHOLD || Math.abs(dy) > DRAG_THRESHOLD) d.moved = true
-      setPos({ bottom: Math.max(0, d.startBottom + dy), right: Math.max(0, d.startRight - dx) })
+      setPos(clampToViewport(d.startLeft + dx, d.startTop + dy, d.width, d.height))
     }
 
     const onUp = () => {
@@ -87,9 +85,11 @@ export default function FloatingActionMenu({ items = [] }) {
   }, [])
 
   return (
-    <div className={`fab-menu ${open ? 'open' : ''}`} style={{ bottom: pos.bottom, right: pos.right }}>
+    <div ref={menuRef} className={`fab-menu ${open ? 'open' : ''}`} style={{ bottom: pos.bottom, right: pos.right }}>
       {items.map((item, i) => {
-        const Icon = ICONS[item.icon]
+        const iconSrc = item.icon === '🔂' && !item.active
+          ? '/assets/button_icon/recycle_close.png'
+          : ICONS[item.icon]
         return (
           <button
             key={i}
@@ -97,7 +97,7 @@ export default function FloatingActionMenu({ items = [] }) {
             title={item.label}
             onClick={(e) => { e.stopPropagation(); item.onClick?.() }}
           >
-            {Icon ? <Icon /> : item.icon}
+            {iconSrc ? <img src={iconSrc} alt="" draggable="false" /> : item.icon}
           </button>
         )
       })}
@@ -106,7 +106,11 @@ export default function FloatingActionMenu({ items = [] }) {
         onPointerDown={handlePointerDown}
         onClick={handleToggle}
       >
-        {open ? '×' : '+'}
+        <img
+          src={open ? '/assets/button_icon/kanban_A.png' : '/assets/button_icon/kanban_B.png'}
+          alt={open ? '收起操作菜单' : '展开操作菜单'}
+          draggable="false"
+        />
       </button>
     </div>
   )

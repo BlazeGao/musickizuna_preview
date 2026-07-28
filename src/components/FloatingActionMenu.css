@@ -1,46 +1,51 @@
 .fab-menu {
   position: fixed;
   display: flex;
-  flex-direction: column-reverse;
+  flex-direction: column;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
   z-index: 1000;
 }
 
 .fab-toggle {
-  width: 52px;
-  height: 52px;
-  border-radius: 50%;
+  width: 92px;
+  height: 100px;
+  padding: 0;
   border: none;
-  background: linear-gradient(135deg, #667eea, #764ba2);
-  color: #fff;
-  font-size: 24px;
-  font-weight: 300;
-  cursor: pointer;
-  box-shadow: 0 4px 20px rgba(102, 126, 234, 0.45);
-  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1),
-              box-shadow 0.25s ease;
+  background: transparent;
+  cursor: grab;
   display: flex;
   align-items: center;
   justify-content: center;
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), filter 0.25s ease;
+  touch-action: none;
+}
+
+.fab-toggle img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  user-select: none;
+  pointer-events: none;
+  filter: drop-shadow(0 5px 12px rgba(93, 65, 220, 0.4));
 }
 
 .fab-toggle:hover {
   transform: scale(1.08);
-  box-shadow: 0 6px 28px rgba(102, 126, 234, 0.6);
+  filter: brightness(1.12);
 }
 
 .fab-toggle:active {
+  cursor: grabbing;
   transform: scale(0.95);
 }
 
 .fab-item {
-  width: 42px;
-  height: 42px;
-  border-radius: 50%;
-  border: 1.5px solid rgba(255, 255, 255, 0.15);
-  background: rgba(20, 20, 50, 0.75);
-  color: rgba(255, 255, 255, 0.85);
+  width: 58px;
+  height: 58px;
+  padding: 0;
+  border: none;
+  background: transparent;
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -48,26 +53,28 @@
   opacity: 0;
   transform: scale(0.4) translateY(12px);
   pointer-events: none;
-  transition: opacity 0.22s ease, transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1),
-              background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
-  backdrop-filter: blur(12px);
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+  transition: opacity 0.22s ease, transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1), filter 0.15s ease;
+}
+
+.fab-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  user-select: none;
+  pointer-events: none;
+  filter: drop-shadow(0 4px 9px rgba(48, 35, 160, 0.38));
 }
 
 .fab-item:hover {
-  background: rgba(102, 126, 234, 0.3);
-  border-color: rgba(102, 126, 234, 0.5);
-  box-shadow: 0 2px 16px rgba(102, 126, 234, 0.3);
+  filter: brightness(1.16);
 }
 
 .fab-item:active {
   transform: scale(0.9);
 }
 
-.fab-item.active {
-  background: rgba(102, 126, 234, 0.35);
-  border-color: rgba(102, 126, 234, 0.6);
-  box-shadow: 0 0 14px rgba(102, 126, 234, 0.35);
+.fab-item.active img {
+  filter: brightness(1.12) drop-shadow(0 0 12px rgba(39, 236, 221, 0.55));
 }
 
 .fab-menu.open .fab-item {
