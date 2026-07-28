@@ -1,12 +1,23 @@
 import os
 import re
-import hashlib
+import logging
+from urllib.parse import urlparse
+
 import requests
 import eng_to_ipa as ipa
 import pykakasi
-from flask import Flask, request, jsonify, send_file
+from flask import Flask, request, jsonify
 from flask_cors import CORS
 
+try:
+    from .storage import CosTTSStorage, TTSStorageConfig
+    from .tts_lock import TTSLockManager
+except ImportError:
+    from storage import CosTTSStorage, TTSStorageConfig
+    from tts_lock import TTSLockManager
+
+
+logger = logging.getLogger(__name__)
 
 def normalize_ipa(ipa_str):
     if not ipa_str:
@@ -14,7 +25,11 @@ def normalize_ipa(ipa_str):
     return ipa_str.lower()
 
 app = Flask(__name__)
-CORS(app, origins=['http://localhost:5173', 'http://127.0.0.1:5173'])
+CORS(app, origins=[
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
+    'https://musickizuna.net',
+])
 
 cache = {}
 furigana_cache = {}
@@ -36,10 +51,60 @@ def _reading_to_romaji(reading):
     except Exception:
         return ''
 
-TTS_CACHE_DIR = os.path.join(os.path.dirname(__file__), 'tts_cache')
-os.makedirs(TTS_CACHE_DIR, exist_ok=True)
-
 TTS_API_URL = 'https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation'
+TTS_MODEL = 'qwen3-tts-flash'
+TTS_MAX_TEXT_LENGTH = int(os.environ.get('TTS_MAX_TEXT_LENGTH', '3000'))
+TTS_MAX_AUDIO_BYTES = int(os.environ.get('TTS_MAX_AUDIO_BYTES', str(20 * 1024 * 1024)))
+
+_tts_storage = None
+_tts_locks = TTSLockManager()
+
+
+def _get_tts_storage():
+    global _tts_storage
+    if _tts_storage is None:
+        _tts_storage = CosTTSStorage(TTSStorageConfig.from_env())
+    return _tts_storage
+
+
+def _normalize_tts_text(text):
+    return text.replace('\r\n', '\n').replace('\r', '\n').strip()
+
+
+def _tts_voice(lang):
+    if lang == 'ja':
+        return 'Ono Anna', 'Japanese'
+    return 'Kiki', 'Chinese'
+
+
+def _download_tts_audio(audio_url):
+    parsed = urlparse(audio_url)
+    hostname = (parsed.hostname or '').lower()
+    if parsed.scheme != 'https' or not (
+        hostname == 'aliyuncs.com' or hostname.endswith('.aliyuncs.com')
+    ):
+        raise ValueError('TTS provider returned an unexpected audio URL')
+
+    with requests.get(audio_url, timeout=(5, 30), stream=True) as response:
+        response.raise_for_status()
+        content_length = int(response.headers.get('Content-Length') or 0)
+        if content_length > TTS_MAX_AUDIO_BYTES:
+            raise ValueError('Generated audio is too large')
+
+        chunks = []
+        received = 0
+        for chunk in response.iter_content(chunk_size=64 * 1024):
+            if not chunk:
+                continue
+            received += len(chunk)
+            if received > TTS_MAX_AUDIO_BYTES:
+                raise ValueError('Generated audio is too large')
+            chunks.append(chunk)
+
+    audio = b''.join(chunks)
+    if len(audio) < 12 or audio[:4] != b'RIFF' or audio[8:12] != b'WAVE':
+        raise ValueError('TTS provider returned invalid WAV audio')
+    return audio
 
 
 @app.route('/api/phonetic')
@@ -93,67 +158,90 @@ def phonetic_batch():
 @app.route('/api/tts', methods=['POST'])
 def tts():
     data = request.get_json() or {}
-    text = data.get('text', '').strip()
+    raw_text = data.get('text', '')
+    if not isinstance(raw_text, str):
+        return jsonify({'error': 'text must be a string'}), 400
+    text = _normalize_tts_text(raw_text)
     lang = data.get('lang', 'zh')
 
     if not text:
         return jsonify({'error': 'text is required'}), 400
+    if len(text) > TTS_MAX_TEXT_LENGTH:
+        return jsonify({'error': f'text exceeds {TTS_MAX_TEXT_LENGTH} characters'}), 400
+    if lang not in ('zh', 'ja'):
+        return jsonify({'error': 'unsupported language'}), 400
 
     api_key = os.environ.get('QWEN_TTS_API_KEY')
     if not api_key:
         return jsonify({'error': 'QWEN_TTS_API_KEY not configured'}), 500
 
-    cache_key_str = f'{lang}:{text}'
-    cache_key = hashlib.md5(cache_key_str.encode()).hexdigest()
-    audio_file = os.path.join(TTS_CACHE_DIR, f'{cache_key}.wav')
-
-    if os.path.exists(audio_file):
-        return send_file(audio_file, mimetype='audio/wav', conditional=True)
-
-    voice = 'Kiki'
-    language_type = 'Chinese'
-    if lang == 'ja':
-        voice = 'Ono Anna'
-        language_type = 'Japanese'
+    voice, language_type = _tts_voice(lang)
 
     try:
-        resp = requests.post(
-            TTS_API_URL,
-            headers={
-                'Authorization': f'Bearer {api_key}',
-                'Content-Type': 'application/json',
-            },
-            json={
-                'model': 'qwen3-tts-flash',
-                'input': {
-                    'text': text,
-                    'voice': voice,
-                    'language_type': language_type,
-                },
-            },
-            timeout=30,
+        storage = _get_tts_storage()
+        object_key = storage.make_object_key(
+            text=text,
+            lang=lang,
+            model=TTS_MODEL,
+            voice=voice,
         )
-        result = resp.json()
+        cache_hit = storage.exists(object_key)
 
-        audio_url = result.get('output', {}).get('audio', {}).get('url')
+        if not cache_hit:
+            with _tts_locks.acquire(object_key) as acquired:
+                if not acquired:
+                    return jsonify({'error': 'TTS generation is busy; please retry'}), 503
 
-        if resp.status_code != 200 or not audio_url:
-            error_msg = result.get('message', resp.text)
-            return jsonify({'error': error_msg}), 502
+                cache_hit = storage.exists(object_key)
+                if not cache_hit:
+                    response = requests.post(
+                        TTS_API_URL,
+                        headers={
+                            'Authorization': f'Bearer {api_key}',
+                            'Content-Type': 'application/json',
+                        },
+                        json={
+                            'model': TTS_MODEL,
+                            'input': {
+                                'text': text,
+                                'voice': voice,
+                                'language_type': language_type,
+                            },
+                        },
+                        timeout=(5, 30),
+                    )
+                    try:
+                        result = response.json()
+                    except ValueError:
+                        result = {}
 
-        audio_resp = requests.get(audio_url, timeout=30)
-        if audio_resp.status_code != 200:
-            return jsonify({'error': 'Failed to download audio'}), 502
+                    audio_url = result.get('output', {}).get('audio', {}).get('url')
+                    if response.status_code != 200 or not audio_url:
+                        logger.warning('Qwen TTS failed with status %s', response.status_code)
+                        error_msg = result.get('message', 'TTS provider request failed')
+                        return jsonify({'error': error_msg}), 502
 
-        with open(audio_file, 'wb') as f:
-            f.write(audio_resp.content)
+                    audio = _download_tts_audio(audio_url)
+                    storage.upload_wav(object_key, audio)
 
-        return send_file(audio_file, mimetype='audio/wav', conditional=True)
+        signed_url, expires_at = storage.signed_download(object_key)
+        return jsonify({
+            'audioUrl': signed_url,
+            'cacheKey': object_key,
+            'cacheHit': cache_hit,
+            'urlExpiresAt': expires_at,
+        })
 
     except requests.Timeout:
         return jsonify({'error': 'TTS API timeout'}), 504
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+    except requests.RequestException:
+        logger.exception('TTS provider request failed')
+        return jsonify({'error': 'TTS provider request failed'}), 502
+    except ValueError as exc:
+        return jsonify({'error': str(exc)}), 502
+    except Exception:
+        logger.exception('TTS request failed')
+        return jsonify({'error': 'TTS service unavailable'}), 503
 
 
 @app.route('/api/furigana')

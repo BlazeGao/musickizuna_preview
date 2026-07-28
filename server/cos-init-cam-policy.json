@@ -1,0 +1,18 @@
+{
+  "version": "2.0",
+  "statement": [
+    {
+      "effect": "allow",
+      "action": [
+        "name/cos:GetBucketVersioning",
+        "name/cos:GetBucketLifecycle",
+        "name/cos:PutBucketLifecycle",
+        "name/cos:GetBucketCORS",
+        "name/cos:PutBucketCORS"
+      ],
+      "resource": [
+        "qcs::cos:ap-guangzhou:uid/1302603299:muzuna2-1302603299/"
+      ]
+    }
+  ]
+}
