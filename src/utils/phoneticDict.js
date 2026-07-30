@@ -1,7 +1,7 @@
 import ToJyutping from 'to-jyutping'
 import { pinyin } from 'pinyin-pro'
 
-const API_BASE = 'http://127.0.0.1:5001'
+const API_BASE = ''
 
 const CACHE_KEY = 'phonetic_cache'
 

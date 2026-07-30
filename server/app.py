@@ -29,6 +29,7 @@ CORS(app, origins=[
     'http://localhost:5173',
     'http://127.0.0.1:5173',
     'https://musickizuna.net',
+    'https://www.musickizuna.net',
 ])
 
 cache = {}
@@ -80,7 +81,7 @@ def _tts_voice(lang):
 def _download_tts_audio(audio_url):
     parsed = urlparse(audio_url)
     hostname = (parsed.hostname or '').lower()
-    if parsed.scheme != 'https' or not (
+    if parsed.scheme not in ('http', 'https') or not (
         hostname == 'aliyuncs.com' or hostname.endswith('.aliyuncs.com')
     ):
         raise ValueError('TTS provider returned an unexpected audio URL')

@@ -1,4 +1,4 @@
-const API_BASE = 'http://127.0.0.1:5001'
+const API_BASE = ''
 
 const FURIGANA_CACHE_KEY = 'furigana_cache_v2'
 const FURIGANA_OVERRIDES_KEY = 'furigana_overrides'
