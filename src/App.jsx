@@ -468,7 +468,28 @@ export default function App() {
     if (history.find((e) => e.id === id)?.isBuiltin) return
     const updated = removeHistoryEntry(activeLang, id)
     setHistory(mergeHistory(updated))
-  }, [activeLang, history, mergeHistory])
+
+    // If the deleted entry is currently selected, clear the player state as
+    // well. Keeping its musicName would trigger the "add selected music to
+    // history" effect and immediately recreate the entry with no lyrics.
+    if (currentEntry?.id === id) {
+      if (audioUrlRef.current) {
+        URL.revokeObjectURL(audioUrlRef.current)
+        audioUrlRef.current = null
+      }
+      setMusicFile(null)
+      setMusicName('')
+      setLyricsMap({})
+      setFuriganaMap({})
+      setFuriganaOverrides({})
+      setRomajiLines({})
+      setCurrentIndex(-1)
+      setCurrentTime(0)
+      setAutoPlay(false)
+      repeatTargetRef.current = -1
+      workspacesRef.current[activeLang] = DEFAULT_WORKSPACE()
+    }
+  }, [activeLang, currentEntry, history, mergeHistory])
 
   const handleAddLyricsToEntry = useCallback(async (entry, lang, file) => {
     // Block mutation of built-in entries. They already have their shipped

@@ -99,6 +99,8 @@ export default function NowPlaying({
 
       <button
         className="now-playing-remove"
+        title="删除歌曲"
+        aria-label={`删除歌曲：${entry.musicName}`}
         onClick={(e) => {
           e.stopPropagation()
           onRemove(entry.id)
